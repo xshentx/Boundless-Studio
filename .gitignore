@@ -1,0 +1,24 @@
+# Build outputs and runtime data
+/build/bin/
+/build/package/
+/build/*preview.png
+/build/icon-explorer-verification.png
+/data/
+
+# Frontend dependencies and outputs
+/node_modules/
+/frontend/node_modules/
+/frontend/dist/
+
+# Local test/debug outputs
+/frontend/test-results*.txt
+/frontend/test-model-update*.txt
+*.log
+*.tmp
+*.bak
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

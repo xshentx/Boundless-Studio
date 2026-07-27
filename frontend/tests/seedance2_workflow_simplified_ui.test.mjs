@@ -1,0 +1,91 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const testDir = dirname(fileURLToPath(import.meta.url));
+const repoRoot = join(testDir, "..");
+const canvasClientSource = readFileSync(
+  join(repoRoot, "src/app/canvas/workspace/canvas-client-page.tsx"),
+  "utf8",
+);
+
+const panelStart = canvasClientSource.indexOf("function Seedance2WorkflowPanel");
+const panelEnd = canvasClientSource.indexOf("function InfiniteCanvasPage", panelStart);
+assert.ok(panelStart >= 0 && panelEnd > panelStart, "Seedance2WorkflowPanel source should be extractable");
+const panelSource = canvasClientSource.slice(panelStart, panelEnd);
+
+const rebuildStart = canvasClientSource.indexOf("const rebuildSeedance2Placeholders");
+const rebuildEnd = canvasClientSource.indexOf("const deleteNodes", rebuildStart);
+assert.ok(rebuildStart >= 0 && rebuildEnd > rebuildStart, "Seedance2 placeholder rebuild handler should be extractable");
+const rebuildSource = canvasClientSource.slice(rebuildStart, rebuildEnd);
+
+const createStart = canvasClientSource.indexOf("const createSeedance2Workflow");
+assert.ok(createStart >= 0 && createStart < rebuildStart, "Seedance2 workflow creator should be extractable");
+const createSource = canvasClientSource.slice(createStart, rebuildStart);
+const ratioOptionsStart = canvasClientSource.indexOf("const SEEDANCE2_API_RATIO_OPTIONS");
+const ratioOptionsEnd = canvasClientSource.indexOf("const SEEDANCE2_SHOT_COUNT_OPTIONS", ratioOptionsStart);
+assert.ok(ratioOptionsStart >= 0 && ratioOptionsEnd > ratioOptionsStart, "Seedance2 ratio options should be extractable");
+const ratioOptionsSource = canvasClientSource.slice(ratioOptionsStart, ratioOptionsEnd);
+
+assert.doesNotMatch(panelSource, /恢复默认/, "Seedance2 workflow panel should not render the restore default button");
+assert.doesNotMatch(panelSource, /参考图顺序（每行一个）/, "Seedance2 workflow panel should not render the reference order textarea label");
+assert.doesNotMatch(panelSource, /referenceOrderTextareaRef/, "Seedance2 workflow panel should not keep reference order textarea wiring");
+assert.match(panelSource, /视频提示词模板/, "Seedance2 workflow panel should keep the prompt template textarea label");
+assert.match(panelSource, /promptTemplateTextareaRef/, "Seedance2 workflow panel should keep prompt template textarea wiring");
+assert.match(
+  canvasClientSource,
+  /const SEEDANCE2_PROMPT_TEMPLATE_TEXTAREA_MIN_HEIGHT\s*=\s*196/,
+  "Seedance2 workflow prompt template textarea default minimum height should be 196px (old 96px + 100px)",
+);
+assert.match(
+  panelSource,
+  /minHeight:\s*SEEDANCE2_PROMPT_TEMPLATE_TEXTAREA_MIN_HEIGHT/,
+  "Seedance2 workflow prompt template textarea auto-resize should use the 196px minimum height",
+);
+assert.match(
+  panelSource,
+  /style=\{\{ \.\.\.fieldStyle, minHeight: SEEDANCE2_PROMPT_TEMPLATE_TEXTAREA_MIN_HEIGHT \}\}/,
+  "Seedance2 workflow prompt template textarea rendered CSS should keep the same 196px minimum height",
+);
+assert.doesNotMatch(panelSource, />接口</, "Seedance2 workflow panel should not render the interface label card");
+assert.doesNotMatch(panelSource, /本地 Seedance2 API/, "Seedance2 workflow panel should not render the local Seedance2 API badge or copy");
+assert.doesNotMatch(panelSource, /配置全局默认参数，并批量生成视频占位框；生成时走本地 Seedance2 API。/, "Seedance2 workflow panel should not render the old global-default/API description");
+assert.match(panelSource, /label="\u6587\u672c\u6a21\u578b"/u, "Seedance2 workflow panel should keep the text model picker");
+assert.match(panelSource, /label="\u89c6\u9891\u6a21\u578b"/u, "Seedance2 workflow panel should keep the video model picker");
+assert.match(rebuildSource, /LOCAL_SEEDANCE2_API_ENDPOINT/, "Seedance2 placeholder rebuild should still keep the local API endpoint fallback internally");
+
+for (const label of [
+  "\u5206\u955c\u6570\u91cf",
+  "\u65f6\u957f",
+  "\u89c6\u9891\u6a21\u578b",
+  "\u6587\u672c\u6a21\u578b",
+  "\u89c6\u9891\u753b\u9762\u6bd4\u4f8b",
+  "\u6e05\u6670\u5ea6",
+]) {
+  assert.match(panelSource, new RegExp(`label="${label}"`), `Seedance2 workflow panel should render ${label}`);
+}
+assert.equal(
+  (panelSource.match(/<Seedance2OptionPicker/g) || []).length,
+  4,
+  "Seedance2 workflow panel should retain four non-model option controls",
+);
+assert.equal(
+  (panelSource.match(/<Seedance2ModelOptionPicker/g) || []).length,
+  2,
+  "Seedance2 workflow panel should render both dynamic model controls",
+);
+assert.doesNotMatch(panelSource, /label="\u751f\u6210\u6a21\u5f0f"/u, "Seedance2 workflow panel should not render a workflow-mode picker");
+assert.doesNotMatch(panelSource, /label="\u8fde\u7eed\u751f\u6210"/u, "Seedance2 workflow panel should not render a continuous-generation picker");
+assert.doesNotMatch(panelSource, /\u6bcf\u955c\u751f\u6210\u6570\u91cf/u, "Seedance2 workflow panel should not render per-shot generation count");
+assert.match(panelSource, /\u5206\u955c\u5f0f/u, "Seedance2 workflow panel should show its fixed storyboard mode");
+assert.match(panelSource, /seedanceRatioSelection:\s*"manual"/, "manual ratio changes should persist their provenance");
+assert.match(rebuildSource, /resolveSeedance2WorkflowRatio\(/, "placeholder rebuild should resolve the effective workflow ratio");
+assert.doesNotMatch(ratioOptionsSource, /adaptive/, "ratio picker should not offer an unsupported adaptive value");
+assert.match(rebuildSource, /mode:\s*"slice"/, "placeholder rebuild should always use storyboard mode");
+assert.match(rebuildSource, /generateCount:\s*1/, "placeholder rebuild should create one result per shot");
+assert.match(createSource, /mode:\s*"slice"/, "new workflows should be created in storyboard mode");
+assert.match(createSource, /duration:\s*"10"/, "new workflows should default to 10 seconds");
+assert.match(rebuildSource, /duration:\s*meta\.seedanceDuration \|\| meta\.seconds \|\| "10"/, "rebuild should retain the 10-second duration fallback");
+
+console.log("seedance2 workflow simplified ui tests passed");

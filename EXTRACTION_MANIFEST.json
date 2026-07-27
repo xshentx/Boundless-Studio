@@ -1,0 +1,25 @@
+{
+    "project":  "无界创作台（Boundless Studio）",
+    "architecture":  "Wails v2 + Go + React 19 + Vite",
+    "source":  "chatgpt2api-backend/web/src/app/canvas",
+    "preservedFeatureGroups":  [
+                                   "画布项目创建、选择、重命名、删除、导入、导出与修复",
+                                   "无限平移缩放、多选、框选、节点拖拽、吸附、缩略图与快捷操作",
+                                   "文本、图片、视频、音频、配置、故事导演与视频占位节点",
+                                   "节点连线、参考图排序、资源提及、提示词面板与生成历史",
+                                   "图片裁剪、拆分、放大、蒙版、图层、角度、对比与 Seedance2 人脸编辑",
+                                   "图片/视频/音频生成、轮询、失败重试、版本采用与下载",
+                                   "Seedance2 连贯/切片工作流、故事分镜集成、引用继承与批量占位",
+                                   "故事导演分阶段工作流、SSE 解析、角色/场景/道具与分镜资产",
+                                   "IndexedDB 媒体持久化、WebDAV 同步、资产库与恢复数据",
+                                   "平台上游代理、自定义 OpenAI 兼容 API 中继与 WebDAV 代理",
+                                   "Windows 程序图标、系统托盘常驻、关闭隐藏与单实例唤醒",
+                                   "GitHub Releases 自动检测、下载进度与 Windows 客户端自更新"
+                               ],
+    "intentionalAdapters":  [
+                                "Next.js 路由、Link、Image 由等价 React/Vite 兼容层替代",
+                                "旧 Python 服务的浏览器反向代理职责由 Go 中间件承担",
+                                "共享请求基址改为客户端同源，由 Go 转发；画布组件与 CSS 不改样式",
+                                "设置窗口新增软件更新页签，更新状态通过 Wails 事件桥接，不修改原画布视觉样式"
+                            ]
+}

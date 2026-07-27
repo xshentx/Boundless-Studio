@@ -1,0 +1,50 @@
+{
+    "compilerOptions":  {
+                            "target":  "ES2023",
+                            "useDefineForClassFields":  true,
+                            "lib":  [
+                                        "ES2023",
+                                        "DOM",
+                                        "DOM.Iterable"
+                                    ],
+                            "allowJs":  true,
+                            "skipLibCheck":  true,
+                            "esModuleInterop":  true,
+                            "allowSyntheticDefaultImports":  true,
+                            "strict":  true,
+                            "forceConsistentCasingInFileNames":  true,
+                            "module":  "ESNext",
+                            "moduleResolution":  "Bundler",
+                            "resolveJsonModule":  true,
+                            "isolatedModules":  true,
+                            "noEmit":  true,
+                            "jsx":  "react-jsx",
+                            "baseUrl":  ".",
+                            "paths":  {
+                                          "@/*":  [
+                                                      "src/*"
+                                                  ],
+                                          "next/navigation":  [
+                                                                  "src/compat/next-navigation.ts"
+                                                              ],
+                                          "next/link":  [
+                                                            "src/compat/next-link.tsx"
+                                                        ],
+                                          "next/image":  [
+                                                             "src/compat/next-image.tsx"
+                                                         ]
+                                      },
+                            "types":  [
+                                          "vite/client",
+                                          "node"
+                                      ]
+                        },
+    "include":  [
+                    "src"
+                ],
+    "references":  [
+                       {
+                           "path":  "./tsconfig.node.json"
+                       }
+                   ]
+}
