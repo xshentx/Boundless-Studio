@@ -100,10 +100,10 @@ export const defaultConfig: AiConfig = {
     videoModels: [],
     textModels: [],
     audioModels: [],
-    quality: "auto",
+    quality: "1k",
     size: "",
     count: "1",
-    canvasImageCount: "3",
+    canvasImageCount: "1",
     apiRelays: [],
     apiRouting: defaultApiRelayRouting,
     apiBoardRouting: defaultApiBoardModelRouting,
@@ -188,6 +188,10 @@ function validRouteModel(model: string, models: string[]) {
     return models.includes(model) ? model : "";
 }
 
+function normalizePersistedImageQuality(value: string) {
+    const normalized = String(value || "").trim().toLowerCase();
+    return ({ auto: "1k", low: "1k", medium: "2k", high: "4k" } as Record<string, string>)[normalized] || (["1k", "2k", "4k"].includes(normalized) ? normalized : "1k");
+}
 
 export function selectableModelsByCapability(config: AiConfig, capability?: ModelCapability) {
     if (!capability) return config.models;
@@ -272,7 +276,8 @@ export const useConfigStore = create<ConfigStore>()(
                     vquality: config.vquality || "720",
                     videoGenerateAudio: config.videoGenerateAudio || "true",
                     videoWatermark: config.videoWatermark || "false",
-                    canvasImageCount: config.canvasImageCount || "3",
+                    quality: normalizePersistedImageQuality(config.quality),
+                    canvasImageCount: config.canvasImageCount || "1",
                     imageModels: Array.isArray(persistedConfig.imageModels) ? normalizeModelList(config.imageModels) : filterModelsByCapability(config.models, "image"),
                     videoModels: Array.isArray(persistedConfig.videoModels) ? normalizeModelList(config.videoModels) : filterModelsByCapability(config.models, "video"),
                     textModels: Array.isArray(persistedConfig.textModels) ? normalizeModelList(config.textModels) : filterModelsByCapability(config.models, "text"),

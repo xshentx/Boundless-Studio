@@ -3,6 +3,7 @@ import axios from "axios";
 import { resolveApiRequestRoute, routedLocalApiUrl, routedLocalHeaders, type ApiRequestRoute } from "@/services/api/ai-routing";
 import { buildLocalRelayProxyHeaders, buildLocalRelayProxyUrl } from "@/services/api/relay-proxy";
 import { formatRelayModelsError } from "@/services/api/relay-errors";
+import { detectTextApiResponseError } from "@/services/api/text-response-errors";
 import type { ApiBoardRouteKey } from "@/stores/api-relay-config";
 import { type AiConfig } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
@@ -59,6 +60,7 @@ const QUALITY_BASE: Record<string, number> = {
     hd: 2048,
 };
 const QUALITY_ALIASES: Record<string, string> = {
+    auto: "low",
     "1k": "low",
     "2k": "medium",
     "4k": "high",
@@ -95,14 +97,17 @@ function resolveSize(quality: string | undefined, ratio: string): string {
     let longSide: number;
     let shortSide: number;
 
-    if (basePixels) {
-        const targetPixels = basePixels * basePixels;
-        const longSideRaw = Math.sqrt(targetPixels * longRatio);
-        longSide = Math.floor(longSideRaw / IMAGE_SIZE_STEP) * IMAGE_SIZE_STEP;
-        shortSide = Math.round(longSide / longRatio / IMAGE_SIZE_STEP) * IMAGE_SIZE_STEP;
-    } else {
-        shortSide = DEFAULT_IMAGE_SHORT_SIDE;
-        longSide = Math.round((shortSide * longRatio) / IMAGE_SIZE_STEP) * IMAGE_SIZE_STEP;
+    shortSide = basePixels || DEFAULT_IMAGE_SHORT_SIDE;
+    longSide = Math.round((shortSide * longRatio) / IMAGE_SIZE_STEP) * IMAGE_SIZE_STEP;
+
+    // Keep explicit dimensions inside relay limits. The output_size field still
+    // carries the selected 1k/2k/4k tier to providers that support it.
+    const edgeScale = IMAGE_MAX_EDGE / Math.max(longSide, shortSide);
+    const pixelScale = Math.sqrt(IMAGE_MAX_PIXELS / (longSide * shortSide));
+    const scale = Math.min(1, edgeScale, pixelScale);
+    if (scale < 1) {
+        longSide = Math.floor((longSide * scale) / IMAGE_SIZE_STEP) * IMAGE_SIZE_STEP;
+        shortSide = Math.floor((shortSide * scale) / IMAGE_SIZE_STEP) * IMAGE_SIZE_STEP;
     }
 
     const width = isLandscape ? longSide : shortSide;
@@ -246,6 +251,12 @@ function readAxiosError(error: unknown, fallback: string) {
     if (axios.isAxiosError<{ detail?: unknown; error?: unknown; message?: string; msg?: string; code?: number }>(error)) {
         if (error.code === "ECONNABORTED") return `${fallback}：请求超时，请检查后端号池、上游接口或稍后重试`;
         const responseData = error.response?.data;
+        const responseError = detectTextApiResponseError(responseData, {
+            status: error.response?.status,
+            contentType: String(error.response?.headers?.["content-type"] || ""),
+            operation: fallback,
+        });
+        if (responseError) return responseError;
         const errorPayload = readErrorPayload(responseData);
         const message = formatImageApiError(errorPayload, "");
         if (message && !isOpaqueServerError(message)) return message;
@@ -386,7 +397,7 @@ export async function requestGeneration(config: AiConfig, prompt: string, boardR
                 n,
                 ...(quality ? { quality } : {}),
                 ...(requestSize ? { size: requestSize } : {}),
-                ...(config.channelMode === "remote" && outputSize ? { output_size: outputSize } : {}),
+                ...(outputSize ? { output_size: outputSize } : {}),
                 response_format: "b64_json",
                 output_format: IMAGE_OUTPUT_FORMAT,
             },
@@ -423,7 +434,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
     if (requestSize) {
         formData.set("size", requestSize);
     }
-    if (config.channelMode === "remote" && outputSize) {
+    if (outputSize) {
         formData.set("output_size", outputSize);
     }
     const files = referenceImages.map((image) => dataUrlToFile(image));
@@ -485,6 +496,12 @@ export async function requestImageQuestion(config: AiConfig, messages: ChatCompl
                     : {}),
             },
         );
+        const responseError = detectTextApiResponseError(response.data, {
+            status: response.status,
+            contentType: String(response.headers?.["content-type"] || ""),
+            operation: "文本生成失败",
+        });
+        if (responseError) throw new Error(responseError);
         if (typeof response.data === "object" && response.data && "code" in response.data && (response.data as { code?: number; msg?: string }).code !== 0) {
             throw new Error((response.data as { msg?: string }).msg || "请求失败");
         }

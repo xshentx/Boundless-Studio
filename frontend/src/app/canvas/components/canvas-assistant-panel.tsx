@@ -8,6 +8,7 @@ import { motion } from "motion/react";
 import { ImageGenerationPending } from "@/components/image-generation-pending";
 import { ModelPicker } from "@/components/model-picker";
 import { useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
+import { resolveBoardCapabilityRoute } from "@/stores/api-relay-config";
 import { CreditSymbol, imageCreditCost, outputSizeForImageQuality, requestCreditCost } from "@/constant/credits";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { nanoid } from "nanoid";
@@ -20,10 +21,13 @@ import { imageReferenceLabel } from "@/lib/image-reference-prompt";
 import type { ReferenceImage } from "@/types/image";
 import { DiaTextReveal } from "@/components/ui/dia-text-reveal";
 import { CanvasImageSettingsPopover } from "./canvas-image-settings-popover";
+import { buildCanvasAssistantRequestConfig } from "../utils/canvas-assistant-request-config";
 import { CanvasPromptLibrary } from "./canvas-prompt-library";
 import { CanvasNodeType, type CanvasAssistantImage, type CanvasAssistantMessage, type CanvasAssistantReference, type CanvasAssistantSession, type CanvasNodeData } from "../types";
 
 type AssistantMode = "ask" | "image";
+const CANVAS_ASSISTANT_TEXT_MODELS = ["gpt-5.5", "gpt-5.6", "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gemini-3.5-flash", "gemini-3.1-pro"] as const;
+const CANVAS_ASSISTANT_IMAGE_MODELS = ["gpt-image-2", "seedream-5.0-lite", "seedream-4.5", "seedream-4.0", "gemini-3.0-pro-image-four-three", "gemini-3.0-pro-image-landscape", "gemini-3.0-pro-image-portrait", "gemini-3.0-pro-image-square"] as const;
 const PANEL_MOTION_MS = 500;
 const PANEL_MOTION_SECONDS = PANEL_MOTION_MS / 1000;
 const isImeComposing = (event: React.KeyboardEvent) => event.nativeEvent.isComposing || event.keyCode === 229;
@@ -45,10 +49,10 @@ type CanvasAssistantPanelProps = {
 export function CanvasAssistantPanel({ nodes, selectedNodeIds, sessions, activeSessionId, onSelectNodeIds, onSessionsChange, onInsertImage, onInsertText, onPasteImage, onCollapseStart, onCollapse }: CanvasAssistantPanelProps) {
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const effectiveConfig = useEffectiveConfig();
+    const storedConfig = useConfigStore((state) => state.config);
     const publicSettings = useConfigStore((state) => state.publicSettings);
     const cleanupImages = useAssetStore((state) => state.cleanupImages);
     const updateConfig = useConfigStore((state) => state.updateConfig);
-    const isAiConfigReady = useConfigStore((state) => state.isAiConfigReady);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const [width, setWidth] = useState(390);
     const [view, setView] = useState<"chat" | "history">("chat");
@@ -90,7 +94,15 @@ export function CanvasAssistantPanel({ nodes, selectedNodeIds, sessions, activeS
     const selectedNodeKey = useMemo(() => Array.from(selectedNodeIds).sort().join(","), [selectedNodeIds]);
     const allSelectedReferences = useMemo(() => buildAssistantReferences(nodes, selectedNodeIds), [nodes, selectedNodeIds]);
     const selectedReferences = useMemo(() => allSelectedReferences.filter((item) => !removedReferenceIds.has(item.id)), [allSelectedReferences, removedReferenceIds]);
-    const assistantConfig = useMemo(() => ({ ...effectiveConfig, count: effectiveConfig.canvasImageCount || effectiveConfig.count }), [effectiveConfig]);
+    const assistantConfig = useMemo(
+        () => ({
+            ...effectiveConfig,
+            textModel: pickAssistantModel(storedConfig.textModel || effectiveConfig.textModel || effectiveConfig.model, CANVAS_ASSISTANT_TEXT_MODELS),
+            imageModel: pickAssistantModel(storedConfig.imageModel || effectiveConfig.imageModel || effectiveConfig.model, CANVAS_ASSISTANT_IMAGE_MODELS),
+            count: effectiveConfig.canvasImageCount || effectiveConfig.count,
+        }),
+        [effectiveConfig, storedConfig.imageModel, storedConfig.textModel],
+    );
     const iconButtonStyle = { color: theme.node.muted };
 
     useEffect(() => {
@@ -151,8 +163,15 @@ export function CanvasAssistantPanel({ nodes, selectedNodeIds, sessions, activeS
     };
 
     const sendMessage = async (text: string, nextMode: AssistantMode, history: CanvasAssistantMessage[], savedReferences?: CanvasAssistantReference[]) => {
-        const requestConfig = { ...effectiveConfig, count: nextMode === "image" ? effectiveConfig.canvasImageCount || effectiveConfig.count : effectiveConfig.count, model: nextMode === "image" ? effectiveConfig.imageModel || effectiveConfig.model : effectiveConfig.textModel || effectiveConfig.model };
-        if (!isAiConfigReady(requestConfig, requestConfig.model)) {
+        const request = buildCanvasAssistantRequestConfig(assistantConfig, nextMode);
+        if (!request) {
+            openConfigDialog(true);
+            return;
+        }
+        const requestConfig = request.config;
+        try {
+            resolveBoardCapabilityRoute(requestConfig, request.boardRouteKey);
+        } catch {
             openConfigDialog(true);
             return;
         }
@@ -176,7 +195,7 @@ export function CanvasAssistantPanel({ nodes, selectedNodeIds, sessions, activeS
                 const referenceImages: ReferenceImage[] = await Promise.all(
                     refs.filter((item) => item.dataUrl).map(async (item) => ({ id: item.id, name: `${item.title}.png`, type: "image/png", dataUrl: await imageToDataUrl(item), storageKey: item.storageKey })),
                 );
-                const images = referenceImages.length ? await requestEdit(requestConfig, text, referenceImages, undefined, "imageGeneration") : await requestGeneration(requestConfig, text, "imageGeneration");
+                const images = referenceImages.length ? await requestEdit(requestConfig, text, referenceImages, undefined, request.boardRouteKey) : await requestGeneration(requestConfig, text, request.boardRouteKey);
                 const storedImages = await Promise.all(images.map((image) => uploadImage(image.dataUrl)));
                 updateMessage(session.id, assistantId, {
                     text: `生成了 ${storedImages.length} 张图片`,
@@ -192,7 +211,7 @@ export function CanvasAssistantPanel({ nodes, selectedNodeIds, sessions, activeS
                 (streamed) => {
                     updateMessage(session.id, assistantId, { text: streamed, isLoading: false });
                 },
-                { boardRouteKey: "imagePrompt" },
+                { boardRouteKey: request.boardRouteKey },
             );
             updateMessage(session.id, assistantId, { text: answer, isLoading: false });
         } catch (error) {
@@ -256,7 +275,7 @@ export function CanvasAssistantPanel({ nodes, selectedNodeIds, sessions, activeS
                 <div className="flex min-h-[calc(52px+env(safe-area-inset-top))] items-center justify-between border-b px-3 pb-3 pt-[calc(12px+env(safe-area-inset-top))] sm:min-h-0 sm:px-4 sm:py-3" style={{ borderColor: theme.node.stroke }}>
                     <div className="flex items-center gap-2 text-sm font-medium">
                         <Sparkles className="size-4" />
-                        {view === "history" ? "历史记录" : "画布助手(未开发)"}
+                        {view === "history" ? "历史记录" : "画布助手"}
                     </div>
                     <div className="flex items-center gap-1">
                         {view === "history" ? (
@@ -449,11 +468,11 @@ function AssistantComposer({
                         <AssistantModeSwitch mode={mode} theme={theme} onChange={onModeChange} />
                         {mode === "image" ? (
                             <>
-                                <ModelPicker className="h-8 shrink-0" config={config} value={config.imageModel || config.model} onChange={(model) => onConfigChange("imageModel", model)} capability="image" onMissingConfig={onMissingConfig} />
+                                <ModelPicker className="h-8 shrink-0" config={config} value={config.imageModel || config.model} onChange={(model) => onConfigChange("imageModel", model)} capability="image" allowedModels={CANVAS_ASSISTANT_IMAGE_MODELS} onMissingConfig={onMissingConfig} />
                                 <CanvasImageSettingsPopover config={config} placement="topRight" getPopupContainer={() => document.body} buttonClassName="canvas-composer-settings canvas-composer-icon !h-8 !min-w-8 !rounded-full !px-2" onConfigChange={onConfigChange} onMissingConfig={onMissingConfig} />
                             </>
                         ) : (
-                            <ModelPicker className="h-8 shrink-0" config={config} value={config.textModel || config.model} onChange={(model) => onConfigChange("textModel", model)} capability="text" onMissingConfig={onMissingConfig} />
+                            <ModelPicker className="h-8 shrink-0" config={config} value={config.textModel || config.model} onChange={(model) => onConfigChange("textModel", model)} capability="text" allowedModels={CANVAS_ASSISTANT_TEXT_MODELS} onMissingConfig={onMissingConfig} />
                         )}
                     </div>
                     <Button
@@ -509,8 +528,13 @@ function SettingTitle({ children, color }: { children: string; color: string }) 
     );
 }
 
+function pickAssistantModel(value: string, allowedModels: readonly string[]) {
+    const model = String(value || "").trim();
+    return allowedModels.includes(model) ? model : "";
+}
+
 function qualityLabel(value: string) {
-    return ({ auto: "自动", high: "高", medium: "中", low: "低" } as Record<string, string>)[value] || value;
+    return ({ auto: "1k", low: "1k", medium: "2k", high: "4k" } as Record<string, string>)[value] || value;
 }
 
 function AssistantMessages({

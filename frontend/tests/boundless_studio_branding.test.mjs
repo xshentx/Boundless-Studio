@@ -44,7 +44,7 @@ assert.match(mainGo, /UniqueId:\s+singleInstanceUniqueID/);
 assert.match(mainGo, /OnSecondInstanceLaunch:[\s\S]*app\.showMainWindow\(\)/);
 assert.match(mainGo, /OnBeforeClose:\s+app\.onBeforeClose/);
 
-const trayGo = read(projectRoot, "tray.go");
+const trayGo = read(projectRoot, "tray_windows.go");
 assert.match(trayGo, /go:embed build\/windows\/icon\.ico/);
 assert.match(trayGo, /trayOpenLabel\s+=\s+"打开无界创作台"/);
 assert.match(trayGo, /trayHideLabel\s+=\s+"隐藏窗口"/);

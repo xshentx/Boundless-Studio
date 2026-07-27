@@ -68,6 +68,7 @@ import {
   type ChatCompletionMessage,
   type GeneratedImageResult,
 } from "@/services/api/image";
+import { detectTextApiResponseError } from "@/services/api/text-response-errors";
 import {
   requestAudioGeneration,
   storeGeneratedAudio,
@@ -4395,13 +4396,20 @@ function InfiniteCanvasPage() {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.isComposing || event.keyCode === 229) return;
       const target = event.target instanceof Element ? event.target : null;
-      if (
+      const isEditableTarget =
         event.target instanceof HTMLInputElement ||
         event.target instanceof HTMLTextAreaElement ||
         event.target instanceof HTMLSelectElement ||
-        target?.closest("[contenteditable='true'],[data-canvas-no-zoom]")
-      )
+        Boolean(target?.closest("[contenteditable='true']"));
+      if (isEditableTarget) return;
+
+      if (event.key === "Delete" || event.key === "Backspace") {
+        event.preventDefault();
+        deleteActiveCanvasSelection();
         return;
+      }
+
+      if (target?.closest("[data-canvas-no-zoom]")) return;
 
       const key = event.key.toLowerCase();
       const isModifierShortcut = event.metaKey || event.ctrlKey;
@@ -4528,12 +4536,6 @@ function InfiniteCanvasPage() {
       ) {
         event.preventDefault();
         window.dispatchEvent(new Event(CANVAS_SHORTCUT_EVENT));
-        return;
-      }
-
-      if (event.key === "Delete" || event.key === "Backspace") {
-        event.preventDefault();
-        deleteActiveCanvasSelection();
         return;
       }
 
@@ -5596,8 +5598,13 @@ function InfiniteCanvasPage() {
         return;
       }
 
+      const previousStoryAnalysisRaw =
+        node.metadata?.storyAnalysisRaw &&
+        !detectTextApiResponseError(node.metadata.storyAnalysisRaw)
+          ? node.metadata.storyAnalysisRaw
+          : undefined;
       setRunningNodeId(node.id);
-      setNodes((prev) =>
+      applyPersistedNodes((prev) =>
         prev.map((item) =>
           item.id === node.id
             ? {
@@ -5605,6 +5612,7 @@ function InfiniteCanvasPage() {
                 metadata: {
                   ...item.metadata,
                   storyAnalysisStatus: NODE_STATUS_LOADING,
+                  storyAnalysisRaw: undefined,
                   status: NODE_STATUS_LOADING,
                   errorDetails: undefined,
                 },
@@ -5629,6 +5637,7 @@ function InfiniteCanvasPage() {
               boardRouteKey: storyDirectorBoardRouteKey,
             };
         const handleAnalysisDelta = (text: string) => {
+          if (detectTextApiResponseError(text)) return;
           streamed = text;
           setNodes((prev) =>
             prev.map((item) =>
@@ -5662,6 +5671,8 @@ function InfiniteCanvasPage() {
           }
         };
         let raw = (await requestStoryJson(prompt)) || streamed;
+        const initialResponseError = detectTextApiResponseError(raw);
+        if (initialResponseError) throw new Error(initialResponseError);
         let analysis: StoryAnalysisResult;
         try {
           analysis = parseStoryAnalysis(raw);
@@ -5674,10 +5685,12 @@ function InfiniteCanvasPage() {
             parseError,
           );
           raw = (await requestStoryJson(repairPrompt)) || streamed || raw;
+          const repairedResponseError = detectTextApiResponseError(raw);
+          if (repairedResponseError) throw new Error(repairedResponseError);
           analysis = parseStoryAnalysis(raw);
         }
         const storyDevelopmentText = buildStoryDevelopmentText(analysis, node, storyText);
-        setNodes((prev) =>
+        applyPersistedNodes((prev) =>
           syncStoryDirectorInputMetadata(
             prev.map((item) =>
               item.id === node.id
@@ -5711,7 +5724,7 @@ function InfiniteCanvasPage() {
         const errorDetails =
           error instanceof Error ? error.message : "故事分析失败";
         message.error(errorDetails);
-        setNodes((prev) =>
+        applyPersistedNodes((prev) =>
           prev.map((item) =>
             item.id === node.id
               ? {
@@ -5719,6 +5732,11 @@ function InfiniteCanvasPage() {
                   metadata: {
                     ...item.metadata,
                     storyAnalysisStatus: NODE_STATUS_ERROR,
+                    storyGenerationStatus:
+                      item.metadata?.storyGenerationStatus === NODE_STATUS_LOADING
+                        ? "idle"
+                        : item.metadata?.storyGenerationStatus,
+                    storyAnalysisRaw: previousStoryAnalysisRaw,
                     status: NODE_STATUS_ERROR,
                     errorDetails,
                   },
@@ -5732,6 +5750,7 @@ function InfiniteCanvasPage() {
       }
     },
     [
+      applyPersistedNodes,
       effectiveConfig,
       isAiConfigReady,
       message,
@@ -5804,6 +5823,7 @@ function InfiniteCanvasPage() {
                 ...item,
                 metadata: {
                   ...item.metadata,
+                  storyAnalysisStatus: NODE_STATUS_SUCCESS,
                   storyGenerationStatus: NODE_STATUS_LOADING,
                   status: NODE_STATUS_LOADING,
                   errorDetails: undefined,
@@ -6061,6 +6081,7 @@ function InfiniteCanvasPage() {
                 ...item,
                 metadata: {
                   ...item.metadata,
+                  storyAnalysisStatus: NODE_STATUS_SUCCESS,
                   storyGenerationStatus: NODE_STATUS_LOADING,
                   status: NODE_STATUS_LOADING,
                   errorDetails: undefined,
@@ -12196,6 +12217,7 @@ function shouldRouteConnectionToFloatingPanel(node: CanvasNodeData | undefined, 
   if (node.type === CanvasNodeType.StoryDirector) return false;
   if (node.type === CanvasNodeType.Seedance2Workflow) return false;
   if (node.type === CanvasNodeType.Video && node.metadata?.seedanceWorkflowRole === "placeholder") return false;
+  if (node.type === CanvasNodeType.Video && node.metadata?.content) return false;
   return true;
 }
 
@@ -13944,7 +13966,10 @@ function recoverInterruptedStoryDirector(node: CanvasNodeData) {
     metadata.storyAnalysisStatus === NODE_STATUS_LOADING
       ? "idle"
       : metadata.storyAnalysisStatus;
-  const storyGenerationStatus = metadata.storyGenerationStatus;
+  const storyGenerationStatus =
+    metadata.storyGenerationStatus === NODE_STATUS_LOADING
+      ? "idle"
+      : metadata.storyGenerationStatus;
   const hasLoadingStory =
     storyAnalysisStatus !== metadata.storyAnalysisStatus ||
     storyGenerationStatus !== metadata.storyGenerationStatus ||
@@ -13954,12 +13979,9 @@ function recoverInterruptedStoryDirector(node: CanvasNodeData) {
     ...node,
     metadata: {
       ...metadata,
-      status:
-        storyGenerationStatus === NODE_STATUS_LOADING
-          ? NODE_STATUS_LOADING
-          : metadata.errorDetails
-            ? NODE_STATUS_ERROR
-            : NODE_STATUS_SUCCESS,
+      status: metadata.errorDetails
+        ? NODE_STATUS_ERROR
+        : NODE_STATUS_SUCCESS,
       storyAnalysisStatus,
       storyGenerationStatus,
       storyCharacters: metadata.storyCharacters || [],

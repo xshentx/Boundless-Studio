@@ -25,6 +25,7 @@ export const CANVAS_IMAGE_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 export async function uploadImage(input: string | Blob, options: UploadImageOptions = {}): Promise<UploadedImage> {
     const blob = typeof input === "string" ? await fetchImageBlob(input) : input;
+    assertNonEmptyImageBlob(blob);
     const storageKey = `image:${nanoid()}`;
     try {
         await uploadDesktopMedia(storageKey, blob, Boolean(options.retained));
@@ -52,25 +53,26 @@ export async function resolveImageUrl(storageKey?: string, fallback = "") {
 export async function getImageBlob(storageKey: string, options: { touch?: boolean } = {}) {
     try {
         const blob = await getDesktopMediaBlob(storageKey);
-        if (blob) {
+        if (blob?.size) {
             if (options.touch) void patchDesktopMedia(storageKey, { touch: true });
             return blob;
         }
         const legacy = await getLegacyRecord(storageKey);
-        if (!legacy) return null;
+        if (!legacy?.blob.size) return null;
         await uploadDesktopMedia(storageKey, legacy.blob, Boolean(legacy.retained));
         await legacyStore.removeItem(storageKey);
         if (options.touch) void patchDesktopMedia(storageKey, { touch: true });
         return legacy.blob;
     } catch {
         const legacy = await getLegacyRecord(storageKey);
-        if (!legacy) return null;
+        if (!legacy?.blob.size) return null;
         if (options.touch) await legacyStore.setItem(storageKey, { ...legacy, lastAccessedAt: Date.now() });
         return legacy.blob;
     }
 }
 
 export async function setImageBlob(storageKey: string, blob: Blob, options: UploadImageOptions = {}) {
+    assertNonEmptyImageBlob(blob);
     try {
         await uploadDesktopMedia(storageKey, blob, Boolean(options.retained));
         if (options.retained !== undefined) await patchDesktopMedia(storageKey, { retained: options.retained, touch: true });
@@ -233,9 +235,17 @@ function blobToDataUrl(blob: Blob) {
 
 async function fetchImageBlob(url: string) {
     const response = await fetch(normalizeFetchUrl(url));
-    if (response.ok) return response.blob();
-    const message = await response.text().catch(() => "");
-    throw new Error(readFetchError(message, response.status));
+    if (!response.ok) {
+        const message = await response.text().catch(() => "");
+        throw new Error(readFetchError(message, response.status));
+    }
+    const blob = await response.blob();
+    assertNonEmptyImageBlob(blob);
+    return blob;
+}
+
+function assertNonEmptyImageBlob(blob: Blob) {
+    if (!blob.size) throw new Error("图片内容为空，请重新加载或上传后再试");
 }
 
 function normalizeFetchUrl(url: string) {

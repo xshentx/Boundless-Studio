@@ -4,13 +4,13 @@ import { type ReactNode, useState } from "react";
 import { ConfigProvider, Switch } from "antd";
 
 import { type CanvasTheme } from "@/lib/canvas-theme";
+import { explicitImageSizeToAspectRatio } from "@/lib/image-size-selection";
 import type { AiConfig } from "@/stores/use-config-store";
 
 const qualityOptions = [
-    { value: "auto", label: "自动" },
-    { value: "low", label: "low" },
-    { value: "medium", label: "medium" },
-    { value: "high", label: "high" },
+    { value: "1k", label: "1k" },
+    { value: "2k", label: "2k" },
+    { value: "4k", label: "4k" },
 ];
 const DIMENSION_STEP = 16;
 
@@ -40,11 +40,16 @@ export type ImageSettingsSection = "quality" | "size" | "count";
 
 export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5", maxCount = 20, quickCount = 10, sections = ["quality", "size", "count"] }: ImageSettingsPanelProps) {
     const [snapDimensionToStep, setSnapDimensionToStep] = useState(true);
-    const quality = config.quality || "auto";
+    const quality = normalizeImageQuality(config.quality);
     const count = Math.max(1, Math.min(maxCount, Math.floor(Math.abs(Number(config.count)) || 1)));
     const activeSize = config.size || "auto";
     const selectedAspect = aspectOptions.find((item) => item.value === activeSize);
     const dimensions = readSizeDimensions(activeSize, selectedAspect || aspectOptions[0]);
+    const selectQuality = (value: string) => {
+        onConfigChange("quality", value);
+        const aspectRatio = explicitImageSizeToAspectRatio(activeSize);
+        if (aspectRatio !== activeSize) onConfigChange("size", aspectRatio);
+    };
     const selectAspect = (value: string) => {
         const option = aspectOptions.find((item) => item.value === value);
         onConfigChange("size", option?.value || "auto");
@@ -70,10 +75,10 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
                 {showTitle ? <div className="text-lg font-semibold">图像设置</div> : null}
                 {sections.includes("quality") ? (
                     <div className="space-y-2.5">
-                        <SettingTitle color={theme.node.muted}>清晰度</SettingTitle>
-                        <div className="grid grid-cols-4 gap-2.5">
+                        <SettingTitle color={theme.node.muted}>图片规格</SettingTitle>
+                        <div className="grid grid-cols-3 gap-2.5">
                             {qualityOptions.map((item) => (
-                                <OptionPill key={item.value} selected={quality === item.value} theme={theme} onClick={() => onConfigChange("quality", item.value)}>
+                                <OptionPill key={item.value} selected={quality === item.value} theme={theme} onClick={() => selectQuality(item.value)}>
                                     {item.label}
                                 </OptionPill>
                             ))}
@@ -151,8 +156,13 @@ export function ImageSettingsTheme({ theme, children }: { theme: CanvasTheme; ch
     );
 }
 
+export function normalizeImageQuality(value?: string) {
+    const normalized = String(value || "").toLowerCase();
+    return ({ auto: "1k", low: "1k", medium: "2k", high: "4k" } as Record<string, string>)[normalized] || (["1k", "2k", "4k"].includes(normalized) ? normalized : "1k");
+}
+
 export function imageQualityLabel(value: string) {
-    return ({ auto: "自动", high: "high", medium: "medium", low: "low" } as Record<string, string>)[value] || value;
+    return normalizeImageQuality(value);
 }
 
 export function imageSizeLabel(size: string) {

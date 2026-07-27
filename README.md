@@ -14,7 +14,7 @@
 - **项目与资产管理**：新建、重命名、删除、批量操作、ZIP 导入/导出、资产库与恢复修复。
 - **本地持久化**：SQLite 保存结构化数据，媒体文件本地落盘，并支持旧浏览器数据迁移与 WebDAV 同步。
 - **开放接口**：自定义 OpenAI 兼容 API 中继、模型路由、WebDAV 代理和流式响应。
-- **桌面体验**：单实例运行、系统托盘、关闭时隐藏、Windows 应用内更新检查。
+- **桌面体验**：单实例运行；Windows 支持系统托盘、关闭时隐藏和应用内更新检查。
 
 完整功能矩阵参见 [docs/FEATURE_COMPARISON.md](docs/FEATURE_COMPARISON.md)。
 
@@ -39,7 +39,7 @@
 2. 将 `BoundlessStudio.app` 拖入“应用程序”目录并启动。
 3. 当前自动构建产物未进行 Apple Developer ID 签名与公证；若 Gatekeeper 阻止首次启动，请在 Finder 中按住 Control 点击应用并选择“打开”。
 
-> Windows 与 macOS 包均由同一 `v1.0.0` 源码标签构建。macOS 包面向 Apple Silicon（ARM64）。Windows 应用内自动更新目前仅处理 Windows 客户端资源；macOS 请从 Releases 手动更新。
+> Windows 与 macOS 包均由同一 `v1.0.1` 源码标签构建。macOS 包面向 Apple Silicon（ARM64）。Windows 应用内自动更新目前仅处理 Windows 客户端资源；macOS 请从 Releases 手动更新。
 
 ## 运行时数据
 
@@ -124,7 +124,7 @@ wails build -platform darwin/arm64 -s
 
 仓库的 [`.github/workflows/release.yml`](.github/workflows/release.yml) 会在推送 `v*` 标签时：
 
-1. 在 Windows 与 macOS 原生 GitHub Actions Runner 上执行前端和 Go 测试。
+1. 在 Windows 与 macOS 原生 GitHub Actions Runner 上执行前端类型检查、生产构建和 Go 测试。
 2. 构建 Windows x64 与 macOS ARM64 程序。
 3. 打包发行文件并生成 SHA-256 校验和。
 4. 创建对应 GitHub Release，并上传双平台产物。
@@ -136,7 +136,7 @@ wails build -platform darwin/arm64 -s
 ```text
 Boundless-Studio/
 ├─ app.go / main.go             Wails 客户端生命周期和窗口
-├─ tray.go                      系统托盘与退出菜单
+├─ tray_windows.go              系统托盘与退出菜单
 ├─ datastore.go                 SQLite 与本地媒体数据层
 ├─ relay.go                     本地 API、HTTP/API/WebDAV 中继
 ├─ updater.go                   GitHub Releases 更新检查
@@ -158,4 +158,4 @@ Boundless-Studio/
 
 ## 版本
 
-当前版本：**v1.0.0**。详见 [RELEASE_NOTES.md](RELEASE_NOTES.md)。
+当前版本：**v1.0.1**。详见 [RELEASE_NOTES.md](RELEASE_NOTES.md)。

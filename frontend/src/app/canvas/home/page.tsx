@@ -125,6 +125,17 @@ export default function CanvasPage() {
                         <Button disabled={!hydrated} icon={<FileUp className="size-4" />} onClick={() => inputRef.current?.click()}>
                             导入画布
                         </Button>
+                        <Button
+                            disabled={!hydrated || !projects.length}
+                            icon={<Download className="size-4" />}
+                            onClick={() => {
+                                const downloadProjects = selectedIds.length ? projects.filter((project) => selectedIds.includes(project.id)) : projects;
+                                void exportCanvasProjects(downloadProjects, selectedIds.length ? `无限画布-${selectedIds.length}个项目` : "无限画布-全部项目");
+                            }}
+                            title={selectedIds.length ? `下载选中的 ${selectedIds.length} 个画布` : "下载全部画布"}
+                        >
+                            下载画布
+                        </Button>
                         <Button icon={<Settings2 className="size-4" />} onClick={() => openApiSettings("relay")}>
                             设置
                         </Button>
@@ -133,9 +144,6 @@ export default function CanvasPage() {
                         </Link>
                         {selectedIds.length ? (
                             <>
-                                <Button disabled={!hydrated} icon={<Download className="size-4" />} onClick={() => void exportCanvasProjects(projects.filter((project) => selectedIds.includes(project.id)), `无限画布-${selectedIds.length}个项目`)}>
-                                    导出选中
-                                </Button>
                                 <Button disabled={!hydrated} onClick={() => setDeleteIds(selectedIds)}>
                                     删除选中
                                 </Button>
