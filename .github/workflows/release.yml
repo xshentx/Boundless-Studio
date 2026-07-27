@@ -119,7 +119,7 @@ jobs:
           wails build -platform darwin/arm64 -s 2>&1 | tee macos-build.log
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
-            message=$(tail -c 6000 macos-build.log | sed 's/%/%25/g; s/\r/%0D/g' | tr '\n' ' ')
+            message=$(tail -c 1800 macos-build.log | sed 's/%/%25/g; s/\r/%0D/g' | tr '\n' ' ')
             echo "::error title=macOS build failed::$message"
             exit "$status"
           fi
