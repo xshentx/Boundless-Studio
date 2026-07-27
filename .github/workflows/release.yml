@@ -72,7 +72,7 @@ jobs:
           if-no-files-found: error
 
   macos:
-    name: macOS Universal
+    name: macOS x64
     runs-on: macos-14
     steps:
       - name: Checkout
@@ -113,12 +113,12 @@ jobs:
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
 
       - name: Build macOS application
-        run: wails build -platform darwin/universal -s
+        run: wails build -platform darwin/amd64 -s
 
       - name: Package macOS application
         run: |
           mkdir -p release
-          ditto -c -k --sequesterRsrc --keepParent build/bin/BoundlessStudio.app release/BoundlessStudio-macos-universal.zip
+          ditto -c -k --sequesterRsrc --keepParent build/bin/BoundlessStudio.app release/BoundlessStudio-macos-amd64.zip
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
@@ -146,7 +146,7 @@ jobs:
 
       - name: Generate checksums
         working-directory: release
-        run: sha256sum BoundlessStudio.exe BoundlessStudio-windows-amd64.zip BoundlessStudio-macos-universal.zip > SHA256SUMS.txt
+        run: sha256sum BoundlessStudio.exe BoundlessStudio-windows-amd64.zip BoundlessStudio-macos-amd64.zip > SHA256SUMS.txt
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
