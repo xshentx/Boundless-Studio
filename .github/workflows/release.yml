@@ -72,7 +72,7 @@ jobs:
           if-no-files-found: error
 
   macos:
-    name: macOS x64
+    name: macOS ARM64
     runs-on: macos-14
     steps:
       - name: Checkout
@@ -116,10 +116,10 @@ jobs:
         shell: bash
         run: |
           set +e
-          wails build -platform darwin/amd64 -s 2>&1 | tee macos-build.log
+          wails build -platform darwin/arm64 -s 2>&1 | tee macos-build.log
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
-            message=$(tail -n 30 macos-build.log | sed 's/%/%25/g; s/\r/%0D/g' | tr '\n' ' ')
+            message=$(tail -c 6000 macos-build.log | sed 's/%/%25/g; s/\r/%0D/g' | tr '\n' ' ')
             echo "::error title=macOS build failed::$message"
             exit "$status"
           fi
@@ -127,7 +127,7 @@ jobs:
       - name: Package macOS application
         run: |
           mkdir -p release
-          ditto -c -k --sequesterRsrc --keepParent build/bin/BoundlessStudio.app release/BoundlessStudio-macos-amd64.zip
+          ditto -c -k --sequesterRsrc --keepParent build/bin/BoundlessStudio.app release/BoundlessStudio-macos-arm64.zip
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
@@ -155,7 +155,7 @@ jobs:
 
       - name: Generate checksums
         working-directory: release
-        run: sha256sum BoundlessStudio.exe BoundlessStudio-windows-amd64.zip BoundlessStudio-macos-amd64.zip > SHA256SUMS.txt
+        run: sha256sum BoundlessStudio.exe BoundlessStudio-windows-amd64.zip BoundlessStudio-macos-arm64.zip > SHA256SUMS.txt
 
       - name: Publish release
         uses: softprops/action-gh-release@v2

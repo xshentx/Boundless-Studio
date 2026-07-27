@@ -25,7 +25,7 @@
 | 平台 | 下载文件 | 系统要求 |
 | --- | --- | --- |
 | Windows x64 | `BoundlessStudio.exe` 或 `BoundlessStudio-windows-amd64.zip` | Windows 10/11，Microsoft WebView2 Runtime |
-| macOS x64 | `BoundlessStudio-macos-amd64.zip` | macOS 10.13+；Apple Silicon 需 Rosetta 2 |
+| macOS ARM64 | `BoundlessStudio-macos-arm64.zip` | macOS 11+；Apple Silicon（M1 或更新） |
 
 ### Windows
 
@@ -35,11 +35,11 @@
 
 ### macOS
 
-1. 解压 `BoundlessStudio-macos-amd64.zip`。
+1. 解压 `BoundlessStudio-macos-arm64.zip`。
 2. 将 `BoundlessStudio.app` 拖入“应用程序”目录并启动。
 3. 当前自动构建产物未进行 Apple Developer ID 签名与公证；若 Gatekeeper 阻止首次启动，请在 Finder 中按住 Control 点击应用并选择“打开”。
 
-> Windows 与 macOS 包均由同一 `v1.0.0` 源码标签构建。Apple Silicon Mac 可通过 Rosetta 2 运行当前 x64 版本。Windows 应用内自动更新目前仅处理 Windows 客户端资源；macOS 请从 Releases 手动更新。
+> Windows 与 macOS 包均由同一 `v1.0.0` 源码标签构建。macOS 包面向 Apple Silicon（ARM64）。Windows 应用内自动更新目前仅处理 Windows 客户端资源；macOS 请从 Releases 手动更新。
 
 ## 运行时数据
 
@@ -114,8 +114,8 @@ go vet ./...
 # Windows x64
 wails build -platform windows/amd64 -s
 
-# macOS x64（需在 macOS 上运行）
-wails build -platform darwin/amd64 -s
+# macOS ARM64（需在 Apple Silicon macOS 上运行）
+wails build -platform darwin/arm64 -s
 ```
 
 构建结果位于 `build/bin/`。请勿在已有用户数据的工作目录中使用 `wails build -clean`，因为该命令会清理 `build/bin`。
@@ -125,7 +125,7 @@ wails build -platform darwin/amd64 -s
 仓库的 [`.github/workflows/release.yml`](.github/workflows/release.yml) 会在推送 `v*` 标签时：
 
 1. 在 Windows 与 macOS 原生 GitHub Actions Runner 上执行前端和 Go 测试。
-2. 构建 Windows x64 与 macOS x64 程序。
+2. 构建 Windows x64 与 macOS ARM64 程序。
 3. 打包发行文件并生成 SHA-256 校验和。
 4. 创建对应 GitHub Release，并上传双平台产物。
 

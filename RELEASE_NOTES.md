@@ -2,7 +2,7 @@
 
 发布日期：2026-07-28
 
-`v1.0.0` 是无界创作台（Boundless Studio）的首个公开双平台版本，提供 Windows x64 与 macOS x64 桌面程序。
+`v1.0.0` 是无界创作台（Boundless Studio）的首个公开双平台版本，提供 Windows x64 与 macOS ARM64 桌面程序。
 
 ## 主要功能
 
@@ -21,7 +21,7 @@
 | --- | --- | --- |
 | Windows | `BoundlessStudio.exe` | x86-64 |
 | Windows 压缩包 | `BoundlessStudio-windows-amd64.zip` | x86-64 |
-| macOS | `BoundlessStudio-macos-amd64.zip` | Intel；Apple Silicon 通过 Rosetta 2 |
+| macOS | `BoundlessStudio-macos-arm64.zip` | Apple Silicon（M1 或更新） |
 | 校验和 | `SHA256SUMS.txt` | SHA-256 |
 
 ## 安装说明
