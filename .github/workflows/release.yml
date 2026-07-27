@@ -34,12 +34,17 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: Type-check frontend
+        working-directory: frontend
+        run: npm run typecheck
+
       - name: Test frontend
         working-directory: frontend
-        run: |
-          npm run typecheck
-          npm test
-          npm run build
+        run: npm test
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
 
       - name: Test Go
         run: |
@@ -90,12 +95,17 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: Type-check frontend
+        working-directory: frontend
+        run: npm run typecheck
+
       - name: Test frontend
         working-directory: frontend
-        run: |
-          npm run typecheck
-          npm test
-          npm run build
+        run: npm test
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
 
       - name: Test Go
         run: |
