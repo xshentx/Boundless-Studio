@@ -53,10 +53,6 @@ func (a *App) runtimeContext() context.Context {
 	return a.ctx
 }
 
-func (a *App) shouldPreventClose() bool {
-	return !a.quitting.Load()
-}
-
 func (a *App) onBeforeClose(ctx context.Context) bool {
 	if !a.shouldPreventClose() {
 		return false

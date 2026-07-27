@@ -1,3 +1,5 @@
+//go:build windows
+
 package main
 
 import (
@@ -15,6 +17,10 @@ const (
 	trayHideLabel = "隐藏窗口"
 	trayQuitLabel = "退出"
 )
+
+func (a *App) shouldPreventClose() bool {
+	return !a.quitting.Load()
+}
 
 func (a *App) startSystemTray() {
 	a.trayStartOnce.Do(func() {
