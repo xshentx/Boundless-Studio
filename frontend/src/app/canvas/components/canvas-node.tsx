@@ -1039,6 +1039,7 @@ function Seedance2LandscapeVideoPlaceholderCard(props: {
                             <div className="mt-2 text-[20px] font-semibold leading-[26px]" style={{ color: props.theme.node.muted }}>
                                 {props.status} · {props.mode}
                             </div>
+                            <Seedance2PlaceholderErrorDetails node={props.node} className="mx-auto max-w-[440px] text-[14px]" />
                         </div>
                     </div>
                 )}
@@ -1894,6 +1895,7 @@ function Seedance2PortraitPreviewArea({ node, theme, shot, status, mode }: { nod
                         <Video className="mx-auto mb-4 size-9" style={{ color: theme.node.faint }} />
                         <div className="whitespace-nowrap text-xl font-black" style={{ color: theme.node.text }}>第{shot}镜视频占位框</div>
                         <div className="mt-3 text-sm font-extrabold" style={{ color: theme.node.muted }}>{status} · {mode}</div>
+                        <Seedance2PlaceholderErrorDetails node={node} />
                     </div>
                 )}
             </div>
@@ -2014,6 +2016,7 @@ function Seedance2LandscapeControlArea({ node, theme, shot, status, mode, ratio,
                         <Video className="mx-auto mb-3 size-8" style={{ color: theme.node.faint }} />
                         <div className="whitespace-nowrap text-base font-black" style={{ color: theme.node.text }}>第{shot}镜视频占位框</div>
                         <div className="mt-2 text-[11px] font-extrabold" style={{ color: theme.node.muted }}>{status} · {mode}</div>
+                        <Seedance2PlaceholderErrorDetails node={node} className="text-[10px] leading-3" />
                     </div>
                 )}
             </div>
@@ -2120,6 +2123,7 @@ function Seedance2VideoPreviewArea({ node, theme, shot, status, mode, ratio, dur
                         <Video className="mx-auto mb-2 size-8 opacity-45" />
                         <div className="text-base font-semibold" style={{ color: theme.node.text }}>第{shot}镜视频占位框</div>
                         <div className="mt-1 text-[11px] opacity-60">{status} · {mode}</div>
+                        <Seedance2PlaceholderErrorDetails node={node} className="text-[10px] leading-3" />
                         <div className="mt-2 rounded-full border px-2 py-1 text-[10px]" style={{ borderColor: theme.node.stroke, color: theme.node.muted }}>已绑定 {referenceCount} 张参考图</div>
                     </div>
                 )}
@@ -2623,6 +2627,24 @@ function seedance2PlaceholderStatusText(status?: string | null) {
     if (normalized === "uploading" || normalized === "upload" || normalized === "uploaded") return "上传中";
     if (normalized === "error" || normalized === "failed" || normalized === "timeout") return "生成失败";
     return "等待生成";
+}
+
+function Seedance2PlaceholderErrorDetails({ node, className = "" }: { node: CanvasNodeData; className?: string }) {
+    const status = String(node.metadata?.status || "").toLowerCase();
+    const raw = String(node.metadata?.errorDetails || "").trim();
+    if (!raw || !["error", "failed", "timeout"].includes(status)) return null;
+    const details = formatCanvasGenerationError(raw, "视频生成失败");
+    if (details === "视频生成失败") return null;
+    return (
+        <div
+            className={`mt-2 rounded-lg border border-red-400/40 bg-red-500/10 px-2.5 py-1.5 font-medium leading-4 text-red-500 ${className}`}
+            style={{ borderColor: "rgba(248,113,113,.45)" }}
+            title={details}
+            data-seedance2-generation-error
+        >
+            {details}
+        </div>
+    );
 }
 
 function nearestSeedance2PlaceholderRatio(ratio: number) {

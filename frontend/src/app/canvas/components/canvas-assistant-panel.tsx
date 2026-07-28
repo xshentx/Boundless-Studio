@@ -8,7 +8,7 @@ import { motion } from "motion/react";
 import { ImageGenerationPending } from "@/components/image-generation-pending";
 import { ModelPicker } from "@/components/model-picker";
 import { useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
-import { modelMatchesAllowedModel, resolveBoardCapabilityRoute, resolveConfiguredModel } from "@/stores/api-relay-config";
+import { resolveBoardCapabilityRoute, resolveConfiguredModel } from "@/stores/api-relay-config";
 import { CreditSymbol, imageCreditCost, outputSizeForImageQuality, requestCreditCost } from "@/constant/credits";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { nanoid } from "nanoid";
@@ -26,8 +26,6 @@ import { CanvasPromptLibrary } from "./canvas-prompt-library";
 import { CanvasNodeType, type CanvasAssistantImage, type CanvasAssistantMessage, type CanvasAssistantReference, type CanvasAssistantSession, type CanvasNodeData } from "../types";
 
 type AssistantMode = "ask" | "image";
-const CANVAS_ASSISTANT_TEXT_MODELS = ["gpt-5.5", "gpt-5.6", "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gemini-3.5-flash", "gemini-3.1-pro"] as const;
-const CANVAS_ASSISTANT_IMAGE_MODELS = ["gpt-image-2", "seedream-5.0-lite", "seedream-4.5", "seedream-4.0", "gemini-3.0-pro-image-four-three", "gemini-3.0-pro-image-landscape", "gemini-3.0-pro-image-portrait", "gemini-3.0-pro-image-square"] as const;
 const PANEL_MOTION_MS = 500;
 const PANEL_MOTION_SECONDS = PANEL_MOTION_MS / 1000;
 const isImeComposing = (event: React.KeyboardEvent) => event.nativeEvent.isComposing || event.keyCode === 229;
@@ -97,8 +95,8 @@ export function CanvasAssistantPanel({ nodes, selectedNodeIds, sessions, activeS
     const assistantConfig = useMemo(
         () => ({
             ...effectiveConfig,
-            textModel: pickAssistantModel([storedConfig.textModel, effectiveConfig.textModel, effectiveConfig.model], effectiveConfig.textModels, CANVAS_ASSISTANT_TEXT_MODELS),
-            imageModel: pickAssistantModel([storedConfig.imageModel, effectiveConfig.imageModel, effectiveConfig.model], effectiveConfig.imageModels, CANVAS_ASSISTANT_IMAGE_MODELS),
+            textModel: pickAssistantModel([storedConfig.textModel, effectiveConfig.textModel, effectiveConfig.model], effectiveConfig.textModels),
+            imageModel: pickAssistantModel([storedConfig.imageModel, effectiveConfig.imageModel, effectiveConfig.model], effectiveConfig.imageModels),
             count: effectiveConfig.canvasImageCount || effectiveConfig.count,
         }),
         [effectiveConfig, storedConfig.imageModel, storedConfig.textModel],
@@ -468,11 +466,11 @@ function AssistantComposer({
                         <AssistantModeSwitch mode={mode} theme={theme} onChange={onModeChange} />
                         {mode === "image" ? (
                             <>
-                                <ModelPicker className="h-8 shrink-0" config={config} value={config.imageModel || config.model} onChange={(model) => onConfigChange("imageModel", model)} capability="image" allowedModels={CANVAS_ASSISTANT_IMAGE_MODELS} onMissingConfig={onMissingConfig} />
+                                <ModelPicker className="h-8 shrink-0" config={config} value={config.imageModel || config.model} onChange={(model) => onConfigChange("imageModel", model)} capability="image" onMissingConfig={onMissingConfig} />
                                 <CanvasImageSettingsPopover config={config} placement="topRight" getPopupContainer={() => document.body} buttonClassName="canvas-composer-settings canvas-composer-icon !h-8 !min-w-8 !rounded-full !px-2" onConfigChange={onConfigChange} onMissingConfig={onMissingConfig} />
                             </>
                         ) : (
-                            <ModelPicker className="h-8 shrink-0" config={config} value={config.textModel || config.model} onChange={(model) => onConfigChange("textModel", model)} capability="text" allowedModels={CANVAS_ASSISTANT_TEXT_MODELS} onMissingConfig={onMissingConfig} />
+                            <ModelPicker className="h-8 shrink-0" config={config} value={config.textModel || config.model} onChange={(model) => onConfigChange("textModel", model)} capability="text" onMissingConfig={onMissingConfig} />
                         )}
                     </div>
                     <Button
@@ -528,12 +526,12 @@ function SettingTitle({ children, color }: { children: string; color: string }) 
     );
 }
 
-function pickAssistantModel(candidates: readonly string[], configuredModels: readonly string[], allowedModels: readonly string[]) {
+function pickAssistantModel(candidates: readonly string[], configuredModels: readonly string[]) {
     for (const candidate of candidates) {
         const configuredModel = resolveConfiguredModel(candidate, configuredModels);
-        if (configuredModel && modelMatchesAllowedModel(configuredModel, allowedModels)) return configuredModel;
+        if (configuredModel) return configuredModel;
     }
-    return "";
+    return configuredModels[0] || "";
 }
 
 function qualityLabel(value: string) {

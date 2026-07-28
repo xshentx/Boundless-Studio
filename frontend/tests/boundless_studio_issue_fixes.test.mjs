@@ -74,15 +74,17 @@ assert.doesNotMatch(editRequest, /channelMode === "remote"[\s\S]{0,80}outputSize
 
 assert.match(assistant, /"\u753b\u5e03\u52a9\u624b"/u);
 assert.doesNotMatch(assistant, /\u753b\u5e03\u52a9\u624b\(\u672a\u5f00\u53d1\)/u);
-assert.match(assistant, /allowedModels=\{CANVAS_ASSISTANT_TEXT_MODELS\}/, "assistant text picker must expose the supported configured models");
-assert.match(assistant, /allowedModels=\{CANVAS_ASSISTANT_IMAGE_MODELS\}/, "assistant image picker must expose the supported configured models");
+assert.doesNotMatch(assistant, /CANVAS_ASSISTANT_(?:TEXT|IMAGE)_MODELS|allowedModels=/, "assistant pickers must not restrict global relay models with a hard-coded whitelist");
+assert.match(assistant, /capability="text"/, "assistant text picker must use the global text capability model list");
+assert.match(assistant, /capability="image"/, "assistant image picker must use the global image capability model list");
 assert.match(assistant, /onChange=\{\(model\) => onConfigChange\("textModel", model\)\}/, "assistant model changes must persist to the selected model state");
 assert.match(assistant, /buildCanvasAssistantRequestConfig\(assistantConfig, nextMode\)/, "assistant requests must be rebuilt from the picker-backed config");
 assert.match(assistant, /boardRouteKey: request\.boardRouteKey/, "assistant text calls must use the temporary selected-model board route");
 assert.match(assistant, /requestGeneration\(requestConfig, text, request\.boardRouteKey\)/, "assistant image calls must use the temporary selected-model board route");
 assert.match(assistant, /resolveConfiguredModel\(candidate, configuredModels\)/, "assistant must resolve persisted aliases to the provider's configured model ID");
-assert.match(assistant, /effectiveConfig\.textModels, CANVAS_ASSISTANT_TEXT_MODELS/, "assistant text selection must resolve against configured text model IDs");
-assert.match(assistant, /effectiveConfig\.imageModels, CANVAS_ASSISTANT_IMAGE_MODELS/, "assistant image selection must resolve against configured image model IDs");
+assert.match(assistant, /effectiveConfig\.textModels\)/, "assistant text selection must resolve against every enabled relay text model");
+assert.match(assistant, /effectiveConfig\.imageModels\)/, "assistant image selection must resolve against every enabled relay image model");
+assert.match(assistant, /return configuredModels\[0\] \|\| "";/, "assistant must select the first global capability model when the previous model is unavailable");
 assert.match(modelPicker, /configuredModels\.filter\(\(model\) => modelMatchesAllowedModel\(model, allowedModels\)\)/, "scoped model pickers must match configured model aliases instead of dropping them");
 assert.match(modelPicker, /aliasMigrationRef\.current = migrationKey;\s*onChange\(current\);/, "resolved aliases must be written back to the parent configuration");
 const routePickerOverlays = apiSettings.match(/contentClassName="z-\[1400\]/g) || [];

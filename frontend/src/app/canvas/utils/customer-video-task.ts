@@ -44,14 +44,32 @@ export function isCustomerVideoTaskReady(
 }
 
 export function customerVideoTaskError(task: CustomerVideoTask | undefined) {
-  return (
-    task?.failure_reason_short ||
-    task?.postprocess_last_error ||
-    errorMessage(task?.error) ||
-    task?.message ||
-    task?.result ||
-    "视频生成失败"
-  );
+  const candidates = [
+    task?.postprocess_last_error,
+    errorMessage(task?.error),
+    task?.message,
+    task?.result,
+    task?.failure_reason_short,
+  ];
+  const detail = candidates.find((value) => !isGenericCustomerVideoFailure(value));
+  return formatCustomerVideoTaskError(detail || candidates.find(Boolean));
+}
+
+function isGenericCustomerVideoFailure(value: unknown) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return !normalized || ["生成失败", "视频生成失败", "failed", "generation failed"].includes(normalized);
+}
+
+function formatCustomerVideoTaskError(value: unknown) {
+  const raw = String(value || "").trim();
+  if (!raw || isGenericCustomerVideoFailure(raw)) return "视频生成失败";
+
+  const detail = raw.replace(/^protocol_only\s+direct\s+adapter\s+failed:\s*/i, "").trim();
+  if (/国家\s*\/\s*地区.*不可用/.test(detail)) {
+    return "视频生成失败：当前视频供应商在所在国家/地区不可用，请切换可用的视频供应商或线路。";
+  }
+  if (/^视频生成失败(?:[：:]|$)/.test(detail)) return detail;
+  return `视频生成失败：${detail}`;
 }
 
 function normalizeCustomerVideoFileUrl(value: unknown, fallbackBaseUrl?: string) {
