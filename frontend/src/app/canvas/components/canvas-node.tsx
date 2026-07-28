@@ -997,19 +997,20 @@ function Seedance2LandscapeVideoPlaceholderCard(props: {
     const hasVideo = Boolean(props.node.metadata?.content);
     return (
         <div
-            className="relative h-full w-full min-h-[668px] min-w-[1114px] overflow-hidden seedance2-placeholder-landscape flex-row rounded-[45px] border-[4px] bg-[#211f1d] text-[#fffaf5]"
+            className="relative h-full w-full min-h-[668px] min-w-[1114px] overflow-hidden seedance2-placeholder-landscape flex-row rounded-[45px] border-[4px]"
             data-seedance2-orientation="landscape"
             data-seedance2-landscape-html-reference
             style={{
-                borderColor: "#48433f",
+                background: props.theme.node.fill,
+                borderColor: props.theme.node.stroke,
                 color: props.theme.node.text,
                 minWidth: SEEDANCE2_HTML_PLACEHOLDER_BASE_WIDTH,
                 minHeight: SEEDANCE2_HTML_PLACEHOLDER_BASE_HEIGHT,
             }}
         >
             <div
-                className="absolute z-[2] bg-[#403b38]"
-                style={seedance2HtmlLandscapeRectStyle(SEEDANCE2_HTML_LANDSCAPE_RECTS.divider)}
+                className="absolute z-[2]"
+                style={{ ...seedance2HtmlLandscapeRectStyle(SEEDANCE2_HTML_LANDSCAPE_RECTS.divider), background: props.theme.node.stroke }}
                 aria-hidden="true"
             />
             <div
@@ -1018,8 +1019,12 @@ function Seedance2LandscapeVideoPlaceholderCard(props: {
                 title="参考图统一输入点：多条参考图连线汇入同一个点，按连接先后上传"
             />
             <div
-                className="absolute z-[3] overflow-hidden rounded-[29px] border-[1.5px] border-[#46413d] bg-[#1d1b19]"
-                style={seedance2HtmlLandscapeResponsivePreviewStyle(SEEDANCE2_HTML_LANDSCAPE_RECTS.preview)}
+                className="absolute z-[3] overflow-hidden rounded-[29px] border-[1.5px]"
+                style={{
+                    ...seedance2HtmlLandscapeResponsivePreviewStyle(SEEDANCE2_HTML_LANDSCAPE_RECTS.preview),
+                    background: props.theme.node.panel,
+                    borderColor: props.theme.node.stroke,
+                }}
                 data-seedance2-landscape-preview
             >
                 {hasVideo ? (
@@ -1027,11 +1032,11 @@ function Seedance2LandscapeVideoPlaceholderCard(props: {
                 ) : (
                     <div className="absolute inset-0 grid place-items-center text-center">
                         <div data-seedance2-placeholder-copy>
-                            <Video className="mx-auto mb-5 size-[34px] text-[#696561] opacity-95" />
-                            <div className="whitespace-nowrap text-[28px] font-extrabold leading-[34px] text-white" style={{ textShadow: "-1px 0 #2aa7ff, 1px 0 #ff6d00" }}>
+                            <Video className="mx-auto mb-5 size-[34px] opacity-95" style={{ color: props.theme.node.faint }} />
+                            <div className="whitespace-nowrap text-[28px] font-extrabold leading-[34px]" style={{ color: props.theme.node.text, textShadow: "-1px 0 #2aa7ff, 1px 0 #ff6d00" }}>
                                 第{props.shot}镜视频占位框
                             </div>
-                            <div className="mt-2 text-[20px] font-semibold leading-[26px] text-[#77716c]">
+                            <div className="mt-2 text-[20px] font-semibold leading-[26px]" style={{ color: props.theme.node.muted }}>
                                 {props.status} · {props.mode}
                             </div>
                         </div>
@@ -1197,14 +1202,14 @@ function Seedance2LandscapeSelect({
             <select
                 value={value}
                 title={title}
-                className="h-full w-full appearance-none rounded-[25px] border-[1.5px] bg-[#1e1c1a] px-[15px] pr-12 text-[18px] font-medium leading-[52px] text-white outline-none transition hover:border-orange-500/80 focus:border-orange-500"
-                style={{ borderColor: theme.node.stroke, color: theme.node.text }}
+                className="h-full w-full appearance-none rounded-[25px] border-[1.5px] px-[15px] pr-12 text-[18px] font-medium leading-[52px] outline-none transition hover:border-orange-500/80 focus:border-orange-500"
+                style={{ background: theme.node.panel, borderColor: theme.node.stroke, color: theme.node.text }}
                 onChange={onChange}
                 onClick={(event) => event.stopPropagation()}
             >
                 {children}
             </select>
-            <span className="pointer-events-none absolute right-[17px] top-1/2 size-[10px] -translate-y-1/2 rotate-45 border-b-[3px] border-r-[3px] border-white" />
+            <span className="pointer-events-none absolute right-[17px] top-1/2 size-[10px] -translate-y-1/2 rotate-45 border-b-[3px] border-r-[3px]" style={{ borderColor: theme.node.muted }} />
         </label>
     );
 }
@@ -1262,7 +1267,7 @@ function Seedance2LandscapeModelSelect({
                 value={value}
                 onChange={onChange}
                 theme={theme}
-                triggerClassName="h-full w-full rounded-[25px] border-[1.5px] bg-[#1e1c1a] px-[15px] text-[18px] font-medium leading-[52px] text-white shadow-none transition hover:border-orange-500/80"
+                triggerClassName="h-full w-full rounded-[25px] border-[1.5px] px-[15px] text-[18px] font-medium leading-[52px] shadow-none transition hover:border-orange-500/80"
             />
         </div>
     );
@@ -1446,16 +1451,16 @@ function Seedance2LandscapeHtmlReferencePanel({
     };
     return (
         <section
-            className="z-[3] overflow-hidden rounded-[28px] border-[1.5px] bg-[#1e1c1a]"
-            style={{ ...seedance2HtmlLandscapeReferencePanelStyle(SEEDANCE2_HTML_LANDSCAPE_RECTS.upload), borderColor: theme.node.stroke }}
+            className="z-[3] overflow-hidden rounded-[28px] border-[1.5px]"
+            style={{ ...seedance2HtmlLandscapeReferencePanelStyle(SEEDANCE2_HTML_LANDSCAPE_RECTS.upload), background: theme.node.panel, borderColor: theme.node.stroke }}
             data-seedance2-landscape-reference-panel
             data-visible-slot-count={slots.length}
             data-canvas-no-zoom
         >
-            <div className="absolute left-[15px] right-[72px] top-[12px] overflow-hidden text-ellipsis whitespace-nowrap text-[17px] font-extrabold leading-[22px] text-white">
+            <div className="absolute left-[15px] right-[72px] top-[12px] overflow-hidden text-ellipsis whitespace-nowrap text-[17px] font-extrabold leading-[22px]" style={{ color: theme.node.text }}>
                 图片排序 · 参考图上传
             </div>
-            <div className="absolute right-[16px] top-[13px] whitespace-nowrap text-[13px] font-bold leading-[22px] text-[#7b7570]">
+            <div className="absolute right-[16px] top-[13px] whitespace-nowrap text-[13px] font-bold leading-[22px]" style={{ color: theme.node.muted }}>
                 共 {slots.length} 张
             </div>
             <div
@@ -1496,8 +1501,8 @@ function Seedance2LandscapeHtmlReferencePanel({
                     return (
                         <SlotElement
                             key={slot.key}
-                            className={`group relative aspect-square min-w-0 overflow-hidden border-[1.5px] bg-[#211f1d] ${isCompact ? "rounded-md" : "rounded-xl"} ${isReadOnlySlot ? "cursor-default" : "cursor-pointer transition hover:border-orange-500/80 hover:bg-white/5"}`}
-                            style={{ borderColor: hasValue ? "rgba(249,115,22,.7)" : theme.node.stroke }}
+                            className={`group relative aspect-square min-w-0 overflow-hidden border-[1.5px] ${isCompact ? "rounded-md" : "rounded-xl"} ${isReadOnlySlot ? "cursor-default" : "cursor-pointer transition hover:border-orange-500/80"}`}
+                            style={{ background: theme.node.fill, borderColor: hasValue ? "rgba(249,115,22,.7)" : theme.node.stroke }}
                             data-seedance2-landscape-reference-slot
                             data-seedance2-reference-source-node-id={slot.resolved?.nodeId}
                             data-canvas-no-drag
@@ -1531,7 +1536,7 @@ function Seedance2LandscapeHtmlReferencePanel({
                             />
                             <span className={`pointer-events-none absolute inset-x-0 bottom-0 min-w-0 bg-black/65 ${isCompact ? "p-0.5" : "p-1"}`}>
                                 <span className={isCompact ? "block truncate text-[6px] font-bold leading-[7px] text-[#f7f7f7]" : "block truncate text-[9px] font-bold leading-3 text-[#f7f7f7]"}>{displayLabel}</span>
-                                <span className={isCompact ? "block truncate text-[6px] leading-[7px] text-[#77716c]" : "block truncate text-[8px] leading-3 text-[#77716c]"}>{subtext}</span>
+                                <span className={isCompact ? "block truncate text-[6px] leading-[7px] text-white/70" : "block truncate text-[8px] leading-3 text-white/70"}>{subtext}</span>
                             </span>
                         </SlotElement>
                     );
@@ -1582,21 +1587,22 @@ function Seedance2CompactPromptSummary({
                 data-canvas-no-zoom
             >
                 <div
-                    className="pointer-events-auto absolute flex items-center gap-3 font-extrabold leading-[26px] text-white"
-                    style={seedance2HtmlLandscapeRectStyle(SEEDANCE2_HTML_LANDSCAPE_RECTS.promptTitle)}
+                    className="pointer-events-auto absolute flex items-center gap-3 font-extrabold leading-[26px]"
+                    style={{ ...seedance2HtmlLandscapeRectStyle(SEEDANCE2_HTML_LANDSCAPE_RECTS.promptTitle), color: theme.node.text }}
                 >
                     <span>视频提示词</span>
-                    <span className="rounded-full border border-orange-500/40 bg-orange-500/15 px-3 py-1 text-[16px] font-black text-orange-100">
+                    <span className="rounded-full border border-orange-500/40 bg-orange-500/15 px-3 py-1 text-[16px] font-black" style={{ color: theme.node.text }}>
                         已折叠
                     </span>
                 </div>
                 <div
-                    className="pointer-events-auto absolute text-right text-[20px] font-bold leading-[26px] text-white"
-                    style={seedance2HtmlLandscapeRectStyle(SEEDANCE2_HTML_LANDSCAPE_RECTS.promptEdit)}
+                    className="pointer-events-auto absolute text-right text-[20px] font-bold leading-[26px]"
+                    style={{ ...seedance2HtmlLandscapeRectStyle(SEEDANCE2_HTML_LANDSCAPE_RECTS.promptEdit), color: theme.node.text }}
                 >
                     <button
                         type="button"
-                        className="rounded-full border border-white/15 px-4 py-1 text-[18px] font-black text-white transition hover:bg-white/10"
+                        className="rounded-full border px-4 py-1 text-[18px] font-black transition hover:opacity-80"
+                        style={{ borderColor: theme.node.stroke, color: theme.node.text }}
                         onClick={expandPrompt}
                         onMouseDown={(event) => event.stopPropagation()}
                         onPointerDown={(event) => event.stopPropagation()}
@@ -1605,18 +1611,18 @@ function Seedance2CompactPromptSummary({
                     </button>
                 </div>
                 <section
-                    className="pointer-events-auto absolute flex flex-col justify-between overflow-hidden rounded-[30px] border-[1.5px] bg-[#1d1b19] px-[24px] py-[22px]"
-                    style={{ ...seedance2HtmlLandscapeRectStyle(SEEDANCE2_HTML_LANDSCAPE_RECTS.promptBox), borderColor: theme.node.stroke }}
+                    className="pointer-events-auto absolute flex flex-col justify-between overflow-hidden rounded-[30px] border-[1.5px] px-[24px] py-[22px]"
+                    style={{ ...seedance2HtmlLandscapeRectStyle(SEEDANCE2_HTML_LANDSCAPE_RECTS.promptBox), background: theme.node.panel, borderColor: theme.node.stroke }}
                     data-seedance2-compact-prompt-summary
                     onDoubleClick={expandPrompt}
                 >
                     <div>
-                        <div className="text-[24px] font-black leading-[30px] text-white">提示词已生成，默认轻量显示</div>
+                        <div className="text-[24px] font-black leading-[30px]" style={{ color: theme.node.text }}>提示词已生成，默认轻量显示</div>
                         <div className="mt-4 line-clamp-4 whitespace-pre-wrap break-words text-[22px] font-semibold leading-[31px]" style={{ color: promptSummary ? theme.node.text : theme.node.muted }}>
                             {promptSummary || "暂无提示词，展开后可手动填写。"}
                         </div>
                     </div>
-                    <div className="mt-6 rounded-[22px] border border-white/10 bg-white/[0.04] px-5 py-4 text-[18px] font-bold leading-[26px] text-[#aaa39e]">
+                    <div className="mt-6 rounded-[22px] border px-5 py-4 text-[18px] font-bold leading-[26px]" style={{ background: theme.node.fill, borderColor: theme.node.stroke, color: theme.node.muted }}>
                         故事模式批量占位默认折叠，减少长文本和编辑器渲染；需要修改时点击“展开编辑”。
                     </div>
                 </section>
@@ -1650,7 +1656,7 @@ function Seedance2CompactPromptSummary({
         : "h-12 shrink-0 rounded-2xl bg-orange-500 px-4 text-base font-bold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-45";
 
     return (
-        <div className={rootClassName} data-seedance2-prompt-panel-mode="compact" data-seedance2-compact-prompt-summary data-canvas-no-zoom>
+        <div className={rootClassName} style={{ borderColor: theme.node.stroke }} data-seedance2-prompt-panel-mode="compact" data-seedance2-compact-prompt-summary data-canvas-no-zoom>
             <div className="flex shrink-0 items-center justify-between gap-2 text-[11px]" style={{ color: theme.node.muted }}>
                 <span className="min-w-0 truncate font-bold" style={{ color: theme.node.text }}>视频提示词 · 已折叠</span>
                 <button
@@ -1729,13 +1735,14 @@ function Seedance2LandscapeHtmlPromptArea({
             data-canvas-no-zoom
         >
             <div
-                className="pointer-events-auto absolute flex items-center gap-3 font-extrabold leading-[26px] text-white"
-                style={seedance2HtmlLandscapeRectStyle(SEEDANCE2_HTML_LANDSCAPE_RECTS.promptTitle)}
+                className="pointer-events-auto absolute flex items-center gap-3 font-extrabold leading-[26px]"
+                style={{ ...seedance2HtmlLandscapeRectStyle(SEEDANCE2_HTML_LANDSCAPE_RECTS.promptTitle), color: theme.node.text }}
             >
                 <span>视频提示词</span>
                 <button
                     type="button"
-                    className="grid size-[26px] shrink-0 place-items-center rounded-full text-[#aaa39e] transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+                    className="grid size-[26px] shrink-0 place-items-center rounded-full transition hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-35"
+                    style={{ color: theme.node.muted }}
                     disabled={!node.metadata?.seedanceAutoPrompt}
                     data-seedance2-regenerate-prompt
                     aria-label="从分镜重新生成提示词"
@@ -1754,14 +1761,14 @@ function Seedance2LandscapeHtmlPromptArea({
                 </button>
             </div>
             <div
-                className="absolute text-right text-[20px] font-bold leading-[26px] text-white"
-                style={seedance2HtmlLandscapeRectStyle(SEEDANCE2_HTML_LANDSCAPE_RECTS.promptEdit)}
+                className="absolute text-right text-[20px] font-bold leading-[26px]"
+                style={{ ...seedance2HtmlLandscapeRectStyle(SEEDANCE2_HTML_LANDSCAPE_RECTS.promptEdit), color: theme.node.text }}
             >
                 双击编辑视频提示词
             </div>
             <section
-                className="pointer-events-auto absolute overflow-hidden rounded-[30px] border-[1.5px] bg-[#1d1b19]"
-                style={{ ...seedance2HtmlLandscapeRectStyle(SEEDANCE2_HTML_LANDSCAPE_RECTS.promptBox), borderColor: theme.node.stroke }}
+                className="pointer-events-auto absolute overflow-hidden rounded-[30px] border-[1.5px]"
+                style={{ ...seedance2HtmlLandscapeRectStyle(SEEDANCE2_HTML_LANDSCAPE_RECTS.promptBox), background: theme.node.panel, borderColor: theme.node.stroke }}
                 data-seedance2-landscape-html-prompt-box
             >
                 {isEditingPrompt ? (
@@ -1853,35 +1860,40 @@ function Seedance2PortraitVideoPlaceholderCard(props: {
         : SEEDANCE2_PORTRAIT_DEFAULT_REFERENCE_SLOT_COUNT;
     const slotCount = Math.max(SEEDANCE2_PORTRAIT_DEFAULT_REFERENCE_SLOT_COUNT, expandedSlotCount, highestBoundSemanticSlotIndex, highestBoundExtraSlotIndex);
     return (
-        <div className="grid h-full w-full grid-rows-[224px_277px_minmax(210px,1fr)] overflow-hidden rounded-[28px] border bg-[#211f1d] text-[#fffaf5]" data-seedance2-orientation="portrait" data-seedance2-portrait-placeholder>
-            <Seedance2PortraitPreviewArea node={props.node} shot={props.shot} status={props.status} mode={props.mode} />
+        <div
+            className="grid h-full w-full grid-rows-[224px_277px_minmax(210px,1fr)] overflow-hidden rounded-[28px] border"
+            style={{ background: props.theme.node.fill, borderColor: props.theme.node.stroke, color: props.theme.node.text }}
+            data-seedance2-orientation="portrait"
+            data-seedance2-portrait-placeholder
+        >
+            <Seedance2PortraitPreviewArea node={props.node} theme={props.theme} shot={props.shot} status={props.status} mode={props.mode} />
             <Seedance2PortraitConfigArea node={props.node} theme={props.theme} ratio={props.ratio} duration={props.duration} referenceOrder={props.referenceOrder} slotCount={slotCount} resolvedSlots={props.seedance2ReferenceSlots} onMetadataChange={props.onMetadataChange} onDeleteConnection={props.onDeleteConnection} />
             {props.isCompactPromptPanel ? (
-                <Seedance2CompactPromptSummary node={props.node} theme={props.theme} className="border-t border-[#403b38]/90" variant="portrait" isRunning={props.isRunning} onMetadataChange={props.onMetadataChange} onGenerateVideo={props.onGenerateVideo} />
+                <Seedance2CompactPromptSummary node={props.node} theme={props.theme} className="border-t" variant="portrait" isRunning={props.isRunning} onMetadataChange={props.onMetadataChange} onGenerateVideo={props.onGenerateVideo} />
             ) : (
-                <Seedance2InlinePromptEditor node={props.node} theme={props.theme} mentionReferences={props.mentionReferences} className="border-t border-[#403b38]/90" variant="portrait" isRunning={props.isRunning} onPromptChange={(value) => props.onContentChange(props.node.id, value)} onMetadataChange={props.onMetadataChange} onGenerateVideo={() => props.onGenerateVideo?.(props.node)} />
+                <Seedance2InlinePromptEditor node={props.node} theme={props.theme} mentionReferences={props.mentionReferences} className="border-t" variant="portrait" isRunning={props.isRunning} onPromptChange={(value) => props.onContentChange(props.node.id, value)} onMetadataChange={props.onMetadataChange} onGenerateVideo={() => props.onGenerateVideo?.(props.node)} />
             )}
         </div>
     );
 }
 
-function Seedance2PortraitPreviewArea({ node, shot, status, mode }: { node: CanvasNodeData; shot: number; status: string; mode: string }) {
+function Seedance2PortraitPreviewArea({ node, theme, shot, status, mode }: { node: CanvasNodeData; theme: (typeof canvasThemes)[keyof typeof canvasThemes]; shot: number; status: string; mode: string }) {
     const hasVideo = Boolean(node.metadata?.content);
     return (
-        <div className="relative flex min-h-0 justify-center border-b border-[#403b38]/90 px-2 py-3">
+        <div className="relative flex min-h-0 justify-center border-b px-2 py-3" style={{ borderColor: theme.node.stroke }}>
             <div data-seedance2-reference-input className="absolute left-1 top-1/2 z-10 size-4 -translate-y-1/2 rounded-full border-2 border-[#171614] bg-orange-500" />
             <div
-                className={`grid h-[200px] min-w-0 shrink-0 place-items-center overflow-hidden rounded-[24px] border border-[#494440] ${hasVideo ? "bg-black" : "bg-[#1c1a18] text-center"}`}
-                style={{ width: "calc(100% - 6px)" }}
+                className={`grid h-[200px] min-w-0 shrink-0 place-items-center overflow-hidden rounded-[24px] border ${hasVideo ? "bg-black" : "text-center"}`}
+                style={{ width: "calc(100% - 6px)", background: hasVideo ? undefined : theme.node.panel, borderColor: theme.node.stroke }}
                 data-seedance2-portrait-preview
             >
                 {hasVideo ? (
                     <video src={node.metadata?.content} controls className="h-full w-full bg-black object-contain" data-canvas-no-zoom />
                 ) : (
                     <div className="px-3" data-seedance2-placeholder-copy>
-                        <Video className="mx-auto mb-4 size-9 opacity-45" />
-                        <div className="whitespace-nowrap text-xl font-black text-white">第{shot}镜视频占位框</div>
-                        <div className="mt-3 text-sm font-extrabold text-[#77716c]">{status} · {mode}</div>
+                        <Video className="mx-auto mb-4 size-9" style={{ color: theme.node.faint }} />
+                        <div className="whitespace-nowrap text-xl font-black" style={{ color: theme.node.text }}>第{shot}镜视频占位框</div>
+                        <div className="mt-3 text-sm font-extrabold" style={{ color: theme.node.muted }}>{status} · {mode}</div>
                     </div>
                 )}
             </div>
@@ -1896,7 +1908,7 @@ function Seedance2PortraitConfigArea({ node, theme, ratio, duration, referenceOr
     const model = node.metadata?.seedanceModel || node.metadata?.model || "";
 
     return (
-        <div className="flex h-full min-h-0 flex-col border-b border-[#403b38]/90 px-3 pb-0 pt-3" data-canvas-no-drag data-canvas-no-zoom>
+        <div className="flex h-full min-h-0 flex-col border-b px-3 pb-0 pt-3" style={{ borderColor: theme.node.stroke }} data-canvas-no-drag data-canvas-no-zoom>
             <div className="grid shrink-0 grid-cols-2 gap-2 text-[10px]">
                 <label className="col-span-2 min-w-0">
                     <span className="sr-only">视频模型</span>
@@ -1992,16 +2004,16 @@ function Seedance2LandscapeControlArea({ node, theme, shot, status, mode, ratio,
     const model = node.metadata?.seedanceModel || node.metadata?.model || "";
 
     return (
-        <div className="relative flex h-full min-h-0 min-w-0 flex-col gap-2.5 overflow-hidden border-r border-[#403b38]/90 p-3" data-canvas-no-drag data-canvas-no-zoom>
+        <div className="relative flex h-full min-h-0 min-w-0 flex-col gap-2.5 overflow-hidden border-r p-3" style={{ borderColor: theme.node.stroke }} data-canvas-no-drag data-canvas-no-zoom>
             <div data-seedance2-reference-input className="absolute left-1 top-1/2 z-10 size-4 -translate-y-1/2 rounded-full border-2 border-[#171614] bg-orange-500 shadow-[0_0_0_2px_rgba(249,115,22,.75),0_0_22px_rgba(249,115,22,.7)]" title="参考图统一输入点：多条参考图连线汇入同一个点，按连接先后上传" />
-            <div className={`grid min-h-0 flex-[1.2] place-items-center overflow-hidden rounded-[24px] border border-[#494440] ${hasVideo ? "bg-black" : "bg-[#1c1a18] text-center"}`}>
+            <div className={`grid min-h-0 flex-[1.2] place-items-center overflow-hidden rounded-[24px] border ${hasVideo ? "bg-black" : "text-center"}`} style={{ background: hasVideo ? undefined : theme.node.panel, borderColor: theme.node.stroke }}>
                 {hasVideo ? (
                     <video src={node.metadata?.content} controls className="h-full w-full bg-black object-contain" data-canvas-no-zoom />
                 ) : (
                     <div className="px-3">
-                        <Video className="mx-auto mb-3 size-8 opacity-45" />
-                        <div className="whitespace-nowrap text-base font-black text-white">第{shot}镜视频占位框</div>
-                        <div className="mt-2 text-[11px] font-extrabold text-[#77716c]">{status} · {mode}</div>
+                        <Video className="mx-auto mb-3 size-8" style={{ color: theme.node.faint }} />
+                        <div className="whitespace-nowrap text-base font-black" style={{ color: theme.node.text }}>第{shot}镜视频占位框</div>
+                        <div className="mt-2 text-[11px] font-extrabold" style={{ color: theme.node.muted }}>{status} · {mode}</div>
                     </div>
                 )}
             </div>
@@ -2236,7 +2248,7 @@ function Seedance2InlinePromptEditor({ node, theme, mentionReferences, className
     }, [isEditingPrompt]);
 
     return (
-        <div className={rootClassName} data-seedance2-inline-prompt data-canvas-no-zoom>
+        <div className={rootClassName} style={{ borderColor: theme.node.stroke }} data-seedance2-inline-prompt data-canvas-no-zoom>
             {!isPortraitVariant ? (
                 <div className={headerClassName} style={{ color: theme.node.muted }}>
                     <span className="flex shrink-0 items-center gap-1 font-semibold" style={{ color: theme.node.text }}>

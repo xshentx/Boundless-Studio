@@ -1,47 +1,47 @@
-# Boundless Studio v1.0.3
+# Boundless Studio v1.0.4
 
 发布日期：2026-07-28
 
-`v1.0.3` 是无界创作台（Boundless Studio）的模型路由与设置交互维护版本，重点修复 Grok 文本模型被错误归类为视频模型，以及 API 设置弹窗中双击模型选择时误选背景文字的问题，并继续提供 Windows x64 与 macOS ARM64 桌面程序。
+`v1.0.4` 是无界创作台（Boundless Studio）的 Seedance2 编辑体验与故事导演图片重新生成稳定性维护版本，重点改善浅色画布主题下的可读性，并修复角色及分镜图片重新生成状态无法正确收敛的问题。
 
-## 修复与改进
+## 主要更新
 
-- 修复仅因模型名包含 `grok` 就被识别为视频模型的问题，`grok-4.5` 等对话模型现在会正确归类到文本能力。
-- 带有明确视频标识的 Grok 模型（例如 `grok-imagine-video`）仍会正确归类到视频能力。
-- 升级时重新校正旧配置中缓存的 Grok 模型能力分类，将误归类的视频模型迁回文本模型列表。
-- 保留供应商显式配置的未知模型能力分类，避免迁移过程覆盖自定义模型配置。
-- API 设置弹窗打开时清除已有文本选择并锁定背景页面，关闭时恢复原有交互状态。
-- 模型选择触发器与选项菜单禁止文本选择，修复双击模型时选中背景文字的问题。
-- 增加 Grok 文本路由、旧配置迁移、显式能力分类和模型选择交互的自动化回归测试。
+### Seedance2 人脸编辑器
+
+- 将关闭按钮调整为编辑器右上角的独立图标按钮，移除重复的底部关闭入口。
+- 保存过程中禁用关闭按钮，避免保存状态被意外中断。
+- 修复旋转角度数值后的度数符号显示乱码。
+- 精简弹窗容器样式，使编辑器布局与画布界面保持一致。
+
+### Seedance2 主题对比度
+
+- 横版与竖版 Seedance2 卡片、选择器、参考图面板、提示词区域和预览区现在跟随当前画布主题。
+- 移除固定深色背景、白色文字和硬编码边框颜色，改善浅色主题下的文字与控件可读性。
+
+### 故事导演图片重新生成
+
+- 修复角色图片和分镜图片重新生成时，加载、提交、成功及失败状态无法正确收敛的问题。
+- 角色图片重试不再依赖已有分镜，也能正确完成状态同步。
+- 正在重新生成的已完成图片会正确恢复为生成中状态。
+- 修复保留旧图片内容时，新任务失败状态被旧内容掩盖的问题。
+- 修复恢复项目时跳过带有旧内容但仍处于加载状态的图片任务。
+- 生成成功后清理旧错误详情与已完成任务 ID；生成失败后释放任务恢复保护状态。
+- 恢复过期的生成错误时保留真实的分析失败信息。
+
+### 测试与质量保障
+
+- 新增 Seedance2 主题对比度回归测试。
+- 扩展人脸编辑器布局与故事导演重新生成状态测试。
+- 增加角色与分镜图片待处理、成功和失败状态的实际 reconciliation helper 覆盖。
 
 ## 下载
 
-| 平台 | 文件 | 架构 |
-| --- | --- | --- |
-| Windows | `BoundlessStudio.exe` | x86-64 |
-| Windows 压缩包 | `BoundlessStudio-windows-amd64.zip` | x86-64 |
-| macOS | `BoundlessStudio-macos-arm64.zip` | Apple Silicon（M1 或更新） |
-| 校验和 | `SHA256SUMS.txt` | SHA-256 |
+- Windows x64 可执行文件：`BoundlessStudio.exe`
+- Windows x64 压缩包：`BoundlessStudio-windows-amd64.zip`
+- macOS Apple Silicon 压缩包：`BoundlessStudio-macos-arm64.zip`
+- SHA-256 校验文件：`SHA256SUMS.txt`
 
-## 安装说明
+## 升级提示
 
-### Windows
-
-下载并运行 `BoundlessStudio.exe`。Windows 10/11 通常已包含 Microsoft Edge WebView2 Runtime；如无法启动，请先安装 WebView2 Runtime。
-
-### macOS
-
-解压 ZIP，将应用拖入“应用程序”目录。此版本由 CI 自动构建，暂未使用 Apple Developer ID 签名和公证。若 Gatekeeper 阻止首次启动，请在 Finder 中按住 Control 点击应用并选择“打开”。
-
-## 数据与升级提示
-
-- 项目数据库和媒体资源保存在应用数据目录的 `data/` 中。
-- 从 `v1.0.2` 升级前，建议备份完整的 `data/` 目录。
-- 本次更新不涉及数据库结构迁移；旧配置中的 Grok 模型能力分类会在配置加载时自动校正。
-- Windows 应用内更新会选择 Release 中的 `BoundlessStudio.exe`；macOS 当前请手动下载新版本。
-
-## 已知限制
-
-- macOS 自动构建包仅支持 Apple Silicon，且未签名、未公证。
-- Windows 应用内自动更新暂不支持 macOS。
-- AI 生成功能需要用户自行配置兼容的 API 服务与密钥。
+- 从 `v1.0.3` 升级前，建议备份完整的 `data/` 目录。
+- macOS 包仅支持 Apple Silicon（ARM64），当前自动构建产物未进行 Apple Developer ID 签名与公证。

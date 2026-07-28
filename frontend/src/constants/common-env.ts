@@ -1,6 +1,6 @@
 const webConfig = {
     apiUrl: "",
-    appVersion: process.env.NEXT_PUBLIC_APP_VERSION || "1.0.3",
+    appVersion: process.env.NEXT_PUBLIC_APP_VERSION || "1.0.4",
 };
 
 export default webConfig;

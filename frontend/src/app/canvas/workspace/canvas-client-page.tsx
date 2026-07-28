@@ -2265,8 +2265,7 @@ function InfiniteCanvasPage() {
         const nextNodes = reconcileStoryDirectorImageResults(
           nodesRef.current.map((node) =>
             node.id === nodeId &&
-            node.metadata?.sourceImageTaskId === taskId &&
-            !node.metadata?.content
+            node.metadata?.sourceImageTaskId === taskId
               ? {
                   ...node,
                   metadata: {
@@ -2295,7 +2294,7 @@ function InfiniteCanvasPage() {
         return (
           node.type === CanvasNodeType.Image &&
           Boolean(node.metadata?.sourceImageTaskId) &&
-          !node.metadata?.content
+          node.metadata?.status === NODE_STATUS_LOADING
         );
       })
       .forEach((node) => {
@@ -5989,6 +5988,7 @@ function InfiniteCanvasPage() {
                     ...item.metadata,
                     storyGenerationStatus: NODE_STATUS_SUCCESS,
                     status: NODE_STATUS_SUCCESS,
+                    errorDetails: undefined,
                   },
                 }
               : item,
@@ -6426,6 +6426,7 @@ function InfiniteCanvasPage() {
                     ...item.metadata,
                     storyGenerationStatus: NODE_STATUS_SUCCESS,
                     status: NODE_STATUS_SUCCESS,
+                    errorDetails: undefined,
                   },
                 }
               : item,
@@ -8515,6 +8516,7 @@ function InfiniteCanvasPage() {
         setDialogNodeId(null);
 
         let directPendingIds: string[] = [];
+        const directPendingTaskIds: string[] = [];
         try {
           const directCount = getGenerationCount(generationConfig.count);
           for (const targetNode of regenerationTargets) {
@@ -8540,8 +8542,12 @@ function InfiniteCanvasPage() {
                     }
                   : node,
               );
-              setNodes(nextNodes);
-              persistCanvasSnapshot(nextNodes);
+              const reconciledNodes = reconcileStoryDirectorImageResults(
+                nextNodes,
+                connectionsRef.current,
+              );
+              setNodes(reconciledNodes);
+              persistCanvasSnapshot(reconciledNodes);
               continue;
             }
             if (!savedReferences.length && referencesImageLabel(directPrompt)) {
@@ -8564,6 +8570,10 @@ function InfiniteCanvasPage() {
             const taskIdByTargetId = new Map(
               targetIds.map((id) => [id, `canvas-${id}-${Date.now()}`]),
             );
+            taskIdByTargetId.forEach((taskId) => {
+              directPendingTaskIds.push(taskId);
+              resumedImageTaskIdsRef.current.add(taskId);
+            });
             const extraNodes: CanvasNodeData[] = targetIds
               .slice(1)
               .map((id, index) => ({
@@ -8603,8 +8613,12 @@ function InfiniteCanvasPage() {
               ),
               ...extraNodes,
             ];
-            setNodes(pendingNodes);
-            persistCanvasSnapshot(pendingNodes);
+            const reconciledPendingNodes = reconcileStoryDirectorImageResults(
+              pendingNodes,
+              connectionsRef.current,
+            );
+            setNodes(reconciledPendingNodes);
+            persistCanvasSnapshot(reconciledPendingNodes);
 
             await Promise.all(
               targetIds.map(async (targetId) => {
@@ -8649,8 +8663,12 @@ function InfiniteCanvasPage() {
                     },
                   };
                 });
-                setNodes(nextNodes);
-                persistCanvasSnapshot(nextNodes);
+                const reconciledNodes = reconcileStoryDirectorImageResults(
+                  nextNodes,
+                  connectionsRef.current,
+                );
+                setNodes(reconciledNodes);
+                persistCanvasSnapshot(reconciledNodes);
               }),
             );
           }
@@ -8663,19 +8681,29 @@ function InfiniteCanvasPage() {
               : regenerationTargets.map((node) => node.id),
           );
           const nextNodes = nodesRef.current.map((node) =>
-            targetIds.has(node.id) && !node.metadata?.content
+            targetIds.has(node.id) &&
+            node.metadata?.status === NODE_STATUS_LOADING &&
+            Boolean(node.metadata?.sourceImageTaskId)
               ? {
                   ...node,
                   metadata: {
                     ...node.metadata,
                     status: NODE_STATUS_ERROR,
                     errorDetails,
+                    sourceImageTaskId: undefined,
                   },
                 }
               : node,
           );
-          setNodes(nextNodes);
-          persistCanvasSnapshot(nextNodes);
+          const reconciledNodes = reconcileStoryDirectorImageResults(
+            nextNodes,
+            connectionsRef.current,
+          );
+          setNodes(reconciledNodes);
+          persistCanvasSnapshot(reconciledNodes);
+          directPendingTaskIds.forEach((taskId) =>
+            resumedImageTaskIdsRef.current.delete(taskId),
+          );
         } finally {
           setRunningNodeId(null);
         }
@@ -9874,18 +9902,21 @@ function InfiniteCanvasPage() {
 
       setRunningNodeId(node.id);
 
-      const retryPendingNodes = nodesRef.current.map((item) =>
-        item.id === node.id
-          ? {
-              ...item,
-              metadata: {
-                ...item.metadata,
-                status: NODE_STATUS_LOADING,
-                errorDetails: undefined,
-                sourceImageTaskId: retryImageTaskId,
-              },
-            }
-          : item,
+      const retryPendingNodes = reconcileStoryDirectorImageResults(
+        nodesRef.current.map((item) =>
+          item.id === node.id
+            ? {
+                ...item,
+                metadata: {
+                  ...item.metadata,
+                  status: NODE_STATUS_LOADING,
+                  errorDetails: undefined,
+                  sourceImageTaskId: retryImageTaskId,
+                },
+              }
+            : item,
+        ),
+        connectionsRef.current,
       );
       setNodes(retryPendingNodes);
       persistCanvasSnapshot(retryPendingNodes);
@@ -10007,18 +10038,21 @@ function InfiniteCanvasPage() {
         }
 
         const taskId = retryImageTaskId || `canvas-${node.id}-${Date.now()}`;
-        const taskNodes = nodesRef.current.map((item) =>
-          item.id === node.id
-            ? {
-                ...item,
-                metadata: {
-                  ...item.metadata,
-                  status: NODE_STATUS_LOADING,
-                  errorDetails: undefined,
-                  sourceImageTaskId: taskId,
-                },
-              }
-            : item,
+        const taskNodes = reconcileStoryDirectorImageResults(
+          nodesRef.current.map((item) =>
+            item.id === node.id
+              ? {
+                  ...item,
+                  metadata: {
+                    ...item.metadata,
+                    status: NODE_STATUS_LOADING,
+                    errorDetails: undefined,
+                    sourceImageTaskId: taskId,
+                  },
+                }
+              : item,
+          ),
+          connectionsRef.current,
         );
         setNodes(taskNodes);
         persistCanvasSnapshot(taskNodes);
@@ -10066,67 +10100,73 @@ function InfiniteCanvasPage() {
               retryImages,
             );
         const batchRootId = node.metadata?.batchRootId;
-        const nextNodes = nodesRef.current.map((item) => {
-          if (item.id === node.id) {
-            return {
-              ...item,
-              type: CanvasNodeType.Image,
-              width: imageSize.width,
-              height: imageSize.height,
-              metadata: {
-                ...item.metadata,
-                ...imageMetadata(uploadedImage, image),
-                prompt,
-                ...generationMetadata,
-              },
-            };
-          }
-          if (
-            batchRootId &&
-            item.id === batchRootId &&
-            !item.metadata?.content
-          ) {
-            const center = {
-              x: item.position.x + item.width / 2,
-              y: item.position.y + item.height / 2,
-            };
-            return {
-              ...item,
-              width: imageSize.width,
-              height: imageSize.height,
-              position: {
-                x: center.x - imageSize.width / 2,
-                y: center.y - imageSize.height / 2,
-              },
-              metadata: {
-                ...item.metadata,
-                ...imageMetadata(uploadedImage, image),
-                prompt,
-                ...generationMetadata,
-                status: NODE_STATUS_SUCCESS,
-                primaryImageId: node.id,
-              },
-            };
-          }
-          return item;
-        });
+        const nextNodes = reconcileStoryDirectorImageResults(
+          nodesRef.current.map((item) => {
+            if (item.id === node.id) {
+              return {
+                ...item,
+                type: CanvasNodeType.Image,
+                width: imageSize.width,
+                height: imageSize.height,
+                metadata: {
+                  ...item.metadata,
+                  ...imageMetadata(uploadedImage, image),
+                  prompt,
+                  ...generationMetadata,
+                },
+              };
+            }
+            if (
+              batchRootId &&
+              item.id === batchRootId &&
+              !item.metadata?.content
+            ) {
+              const center = {
+                x: item.position.x + item.width / 2,
+                y: item.position.y + item.height / 2,
+              };
+              return {
+                ...item,
+                width: imageSize.width,
+                height: imageSize.height,
+                position: {
+                  x: center.x - imageSize.width / 2,
+                  y: center.y - imageSize.height / 2,
+                },
+                metadata: {
+                  ...item.metadata,
+                  ...imageMetadata(uploadedImage, image),
+                  prompt,
+                  ...generationMetadata,
+                  status: NODE_STATUS_SUCCESS,
+                  primaryImageId: node.id,
+                },
+              };
+            }
+            return item;
+          }),
+          connectionsRef.current,
+        );
         setNodes(nextNodes);
         persistCanvasSnapshot(nextNodes);
       } catch (error) {
         const errorDetails = formatCanvasGenerationError(error);
         message.error(errorDetails);
-        const nextNodes = nodesRef.current.map((item) =>
-          item.id === node.id
-            ? {
-                ...item,
-                metadata: {
-                  ...item.metadata,
-                  status: NODE_STATUS_ERROR,
-                  errorDetails,
-                  sourceImageTaskId: undefined,
-                },
-              }
-            : item,
+        const nextNodes = reconcileStoryDirectorImageResults(
+          nodesRef.current.map((item) =>
+            item.id === node.id
+              ? {
+                  ...item,
+                  metadata: {
+                    ...item.metadata,
+                    status: NODE_STATUS_ERROR,
+                    errorDetails,
+                    sourceImageTaskId: undefined,
+                  },
+                }
+              : item,
+          ),
+          connectionsRef.current,
         );
         if (retryImageTaskId) {
           resumedImageTaskIdsRef.current.delete(retryImageTaskId);
@@ -11750,6 +11790,8 @@ function imageMetadata(
     backendRel: generated?.backendRel,
     storageKey: image.storageKey,
     status: "success",
+    errorDetails: undefined,
+    sourceImageTaskId: undefined,
     naturalWidth: image.width,
     naturalHeight: image.height,
     bytes: image.bytes,
@@ -12985,6 +13027,12 @@ function reconcileStoryDirectorImageResults(
   connections: CanvasConnection[],
 ) {
   let changed = false;
+  const syncedNodes = syncStoryDirectorInputMetadata(nodes, connections);
+  if (syncedNodes !== nodes) {
+    nodes = syncedNodes;
+    changed = true;
+  }
+
   let storyOutputImages = storyDirectorOutputImages(nodes, connections);
   const staleErrorImageIds = staleStoryDirectorErrorImageIds(
     storyOutputImages,
@@ -12995,10 +13043,15 @@ function reconcileStoryDirectorImageResults(
     changed = true;
   }
 
+  const storyCharacterInputImages = storyDirectorCharacterInputImages(
+    nodes,
+    connections,
+  );
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const nextNodes = nodes.map((node) => {
     if (node.type !== CanvasNodeType.StoryDirector) return node;
     const shots = node.metadata?.storyShots || [];
-    if (!shots.length) return node;
+    const characters = node.metadata?.storyCharacters || [];
 
     const doneByIndex = new Map<number, { nodeId: string; prompt?: string }>();
     const errorByIndex = new Map<number, string>();
@@ -13008,13 +13061,11 @@ function reconcileStoryDirectorImageResults(
       const indexes = storyShotIndexesFromImageNode(imageNode);
       if (!indexes.length) return;
       const metadata = imageNode.metadata || {};
-      if (metadata.content) {
-        indexes.forEach((index) =>
-          doneByIndex.set(index, {
-            nodeId: imageNode.id,
-            prompt: metadata.prompt,
-          }),
-        );
+      if (
+        metadata.sourceImageTaskId &&
+        metadata.status === NODE_STATUS_LOADING
+      ) {
+        indexes.forEach((index) => activeIndexes.add(index));
         return;
       }
       if (metadata.status === NODE_STATUS_ERROR) {
@@ -13023,16 +13074,36 @@ function reconcileStoryDirectorImageResults(
         );
         return;
       }
-      if (
-        metadata.sourceImageTaskId &&
-        metadata.status === NODE_STATUS_LOADING
-      ) {
-        indexes.forEach((index) => activeIndexes.add(index));
+      if (metadata.content) {
+        indexes.forEach((index) =>
+          doneByIndex.set(index, {
+            nodeId: imageNode.id,
+            prompt: metadata.prompt,
+          }),
+        );
       }
     });
 
     let shotChanged = false;
     const nextShots = shots.map((shot) => {
+      if (activeIndexes.has(shot.index)) {
+        if (shot.status === "generating" && !shot.errorDetails) return shot;
+        shotChanged = true;
+        return {
+          ...shot,
+          status: "generating" as const,
+          errorDetails: undefined,
+        };
+      }
+
+      const errorDetails = errorByIndex.get(shot.index);
+      if (errorDetails) {
+        if (shot.status === "error" && shot.errorDetails === errorDetails)
+          return shot;
+        shotChanged = true;
+        return { ...shot, status: "error" as const, errorDetails };
+      }
+
       const done = doneByIndex.get(shot.index);
       if (done) {
         const resultNodeIds = [
@@ -13056,13 +13127,7 @@ function reconcileStoryDirectorImageResults(
         return nextShot;
       }
 
-      const errorDetails = errorByIndex.get(shot.index);
-      if (errorDetails && shot.status === "generating") {
-        shotChanged = true;
-        return { ...shot, status: "error" as const, errorDetails };
-      }
-
-      if (shot.status === "generating" && !activeIndexes.has(shot.index)) {
+      if (shot.status === "generating") {
         shotChanged = true;
         return { ...shot, status: "pending" as const, errorDetails: undefined };
       }
@@ -13070,41 +13135,254 @@ function reconcileStoryDirectorImageResults(
       return shot;
     });
 
+    const inputImages = storyCharacterInputImages.get(node.id) || [];
+    const usedCharacterImageIds = new Set<string>();
+    const retryCharacters = characters.filter(
+      (character) =>
+        (character.importance === "main" ||
+          character.importance === "supporting") &&
+        (character.status === "generating" || character.status === "error"),
+    );
+    let characterChanged = false;
+    const nextCharacters = characters.map((character) => {
+      const unclaimedImages = inputImages.filter(
+        (imageNode) => !usedCharacterImageIds.has(imageNode.id),
+      );
+      let imageNode = character.referenceNodeId
+        ? unclaimedImages.find(
+            (candidate) => candidate.id === character.referenceNodeId,
+          )
+        : undefined;
+      if (!imageNode) {
+        const orderedCandidateIds = [...unclaimedImages]
+          .sort(
+            (left, right) =>
+              storyImageTaskPriority(left) - storyImageTaskPriority(right),
+          )
+          .map((candidate) => candidate.id);
+        const matchId = findCharacterReferenceCandidate(
+          character,
+          orderedCandidateIds,
+          nodeById,
+        );
+        imageNode = matchId ? nodeById.get(matchId) : undefined;
+      }
+      if (!imageNode && retryCharacters.length === 1) {
+        const retryImages = unclaimedImages.filter(
+          (candidate) =>
+            isActiveStoryImageTask(candidate) ||
+            candidate.metadata?.status === NODE_STATUS_ERROR,
+        );
+        if (
+          retryCharacters[0].id === character.id &&
+          retryImages.length === 1
+        ) {
+          imageNode = retryImages[0];
+        }
+      }
+      if (!imageNode) return character;
+      usedCharacterImageIds.add(imageNode.id);
+
+      if (isActiveStoryImageTask(imageNode)) {
+        if (character.status === "generating" && !character.errorDetails)
+          return character;
+        characterChanged = true;
+        return {
+          ...character,
+          status: "generating" as const,
+          errorDetails: undefined,
+        };
+      }
+
+      if (imageNode.metadata?.status === NODE_STATUS_ERROR) {
+        const errorDetails =
+          imageNode.metadata.errorDetails || "角色图生成失败";
+        if (
+          character.status === "error" &&
+          character.errorDetails === errorDetails
+        )
+          return character;
+        characterChanged = true;
+        return { ...character, status: "error" as const, errorDetails };
+      }
+
+      const referenceImageUrl =
+        imageNode.metadata?.content ||
+        imageNode.metadata?.backendUrl ||
+        imageNode.metadata?.storageKey;
+      if (!referenceImageUrl) return character;
+      const readyStatus =
+        character.assetSource === "generated"
+          ? ("ready" as const)
+          : ("locked" as const);
+      if (
+        character.referenceNodeId === imageNode.id &&
+        character.referenceImageUrl === referenceImageUrl &&
+        character.status === readyStatus &&
+        !character.errorDetails
+      )
+        return character;
+      characterChanged = true;
+      return {
+        ...character,
+        referenceNodeId: imageNode.id,
+        referenceImageUrl,
+        assetSource: character.assetSource || ("upstream" as const),
+        assetLocked: true,
+        status: readyStatus,
+        errorDetails: undefined,
+      };
+    });
+
     const hasGeneratingShot = nextShots.some(
       (shot) => shot.status === "generating",
     );
-    const shouldClearStoryLoading =
-      !hasGeneratingShot &&
-      (node.metadata?.status === NODE_STATUS_LOADING ||
-        node.metadata?.storyGenerationStatus === NODE_STATUS_LOADING);
-    if (!shotChanged && !shouldClearStoryLoading) return node;
-
+    const hasGeneratingCharacter = nextCharacters.some(
+      (character) => character.status === "generating",
+    );
+    const hasActiveGeneration = hasGeneratingShot || hasGeneratingCharacter;
     const hasErrorShot = nextShots.some((shot) => shot.status === "error");
-    const allDone = nextShots.every((shot) => shot.status === "done");
+    const errorCharacter = nextCharacters.find(
+      (character) => character.status === "error",
+    );
+    const hasGenerationError = hasErrorShot || Boolean(errorCharacter);
+    const allShotsDone =
+      shots.length > 0 && nextShots.every((shot) => shot.status === "done");
+    const requiredCharacters = nextCharacters.filter(
+      (character) =>
+        character.importance === "main" || character.importance === "supporting",
+    );
+    const allRequiredCharactersReady =
+      requiredCharacters.length > 0 &&
+      requiredCharacters.every((character) => {
+        if (character.status === "ready" || character.status === "locked")
+          return true;
+        return Boolean(
+          character.referenceNodeId &&
+            hasCanvasImageReference(nodeById.get(character.referenceNodeId)),
+        );
+      });
+    const generationCompleted = allShotsDone || allRequiredCharactersReady;
+    const analysisFailed =
+      node.metadata?.storyAnalysisStatus === NODE_STATUS_ERROR;
+    const analysisLoading =
+      node.metadata?.storyAnalysisStatus === NODE_STATUS_LOADING;
+    const shouldStartStoryRetry =
+      hasActiveGeneration &&
+      !analysisFailed &&
+      !analysisLoading &&
+      (node.metadata?.status !== NODE_STATUS_LOADING ||
+        node.metadata?.storyGenerationStatus !== NODE_STATUS_LOADING ||
+        Boolean(node.metadata?.errorDetails));
+    const shouldClearStoryLoading =
+      !hasActiveGeneration &&
+      !analysisFailed &&
+      !analysisLoading &&
+      (node.metadata?.storyGenerationStatus === NODE_STATUS_LOADING ||
+        node.metadata?.status === NODE_STATUS_LOADING);
+    const shouldRecoverCompletedStory =
+      generationCompleted &&
+      !hasGenerationError &&
+      !hasActiveGeneration &&
+      !analysisFailed &&
+      (node.metadata?.status === NODE_STATUS_ERROR ||
+        node.metadata?.storyGenerationStatus === NODE_STATUS_ERROR ||
+        Boolean(node.metadata?.errorDetails));
+    const shouldSettleDetectedError =
+      hasGenerationError &&
+      !analysisFailed &&
+      (shotChanged || characterChanged);
+    const shouldSettleStoryGeneration =
+      shouldClearStoryLoading ||
+      shouldRecoverCompletedStory ||
+      shouldSettleDetectedError;
+    if (
+      !shotChanged &&
+      !characterChanged &&
+      !shouldStartStoryRetry &&
+      !shouldSettleStoryGeneration
+    )
+      return node;
+
+    const generationErrorDetails =
+      nextShots.find((shot) => shot.status === "error")?.errorDetails ||
+      errorCharacter?.errorDetails ||
+      node.metadata?.errorDetails;
     changed = true;
     return {
       ...node,
       metadata: {
         ...node.metadata,
         storyShots: nextShots,
-        ...(shouldClearStoryLoading
+        storyCharacters: nextCharacters,
+        ...(shouldStartStoryRetry
           ? {
-              status: hasErrorShot ? NODE_STATUS_ERROR : NODE_STATUS_SUCCESS,
-              storyGenerationStatus: hasErrorShot
-                ? NODE_STATUS_ERROR
-                : allDone
-                  ? NODE_STATUS_SUCCESS
-                  : ("idle" as const),
-              errorDetails: hasErrorShot
-                ? node.metadata?.errorDetails
-                : undefined,
+              status: NODE_STATUS_LOADING,
+              storyGenerationStatus: NODE_STATUS_LOADING,
+              errorDetails: undefined,
             }
-          : null),
+          : shouldSettleStoryGeneration
+            ? {
+                status: hasGenerationError
+                  ? NODE_STATUS_ERROR
+                  : NODE_STATUS_SUCCESS,
+                storyGenerationStatus: hasGenerationError
+                  ? NODE_STATUS_ERROR
+                  : generationCompleted
+                    ? NODE_STATUS_SUCCESS
+                    : ("idle" as const),
+                errorDetails: hasGenerationError
+                  ? generationErrorDetails
+                  : undefined,
+              }
+            : null),
       },
     };
   });
 
   return changed ? nextNodes : nodes;
+}
+
+function isActiveStoryImageTask(node: CanvasNodeData) {
+  return Boolean(
+    node.metadata?.sourceImageTaskId &&
+      node.metadata?.status === NODE_STATUS_LOADING,
+  );
+}
+
+function storyImageTaskPriority(node: CanvasNodeData) {
+  if (isActiveStoryImageTask(node)) return 0;
+  if (
+    node.metadata?.content &&
+    node.metadata?.status !== NODE_STATUS_ERROR &&
+    node.metadata?.status !== NODE_STATUS_LOADING
+  )
+    return 1;
+  if (node.metadata?.status === NODE_STATUS_ERROR) return 2;
+  return 3;
+}
+
+function storyDirectorCharacterInputImages(
+  nodes: CanvasNodeData[],
+  connections: CanvasConnection[],
+) {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const characterInputImages = new Map<string, CanvasNodeData[]>();
+  connections.forEach((connection) => {
+    const from = nodeById.get(connection.fromNodeId);
+    const to = nodeById.get(connection.toNodeId);
+    if (
+      connection.toHandleId !== "story:character" ||
+      from?.type !== CanvasNodeType.Image ||
+      to?.type !== CanvasNodeType.StoryDirector
+    )
+      return;
+    characterInputImages.set(to.id, [
+      ...(characterInputImages.get(to.id) || []),
+      from,
+    ]);
+  });
+  return characterInputImages;
 }
 
 function storyDirectorOutputImages(
@@ -13136,17 +13414,18 @@ function staleStoryDirectorErrorImageIds(
   storyOutputImages.forEach((images) => {
     const successfulKeys = new Set<string>();
     images.forEach((imageNode) => {
-      if (!imageNode.metadata?.content) return;
+      if (
+        !imageNode.metadata?.content ||
+        imageNode.metadata?.status === NODE_STATUS_ERROR ||
+        imageNode.metadata?.status === NODE_STATUS_LOADING
+      )
+        return;
       const key = storyDirectorImageResultKey(imageNode);
       if (key) successfulKeys.add(key);
     });
     if (!successfulKeys.size) return;
     images.forEach((imageNode) => {
-      if (
-        imageNode.metadata?.content ||
-        imageNode.metadata?.status !== NODE_STATUS_ERROR
-      )
-        return;
+      if (imageNode.metadata?.status !== NODE_STATUS_ERROR) return;
       const key = storyDirectorImageResultKey(imageNode);
       if (key && successfulKeys.has(key)) {
         staleIds.add(imageNode.id);
@@ -13366,8 +13645,9 @@ function findCharacterReferenceCandidate(
   return (
     candidateIds.find((id) => {
       const node = nodeById.get(id);
-      const haystack =
-        `${node?.title || ""}\n${node?.metadata?.prompt || ""}`.toLowerCase();
+      const haystack = `${node?.title || ""}\n${
+        node?.metadata?.storyLabel || ""
+      }\n${node?.metadata?.prompt || ""}`.toLowerCase();
       return names.some((name) => haystack.includes(name));
     }) || null
   );

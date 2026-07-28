@@ -413,7 +413,10 @@ export function CanvasNodeSeedance2FaceEditDialog({
       keyboard={false}
       closable={false}
       width={FACE_EDITOR_MODAL_WIDTH}
-      styles={{ body: { height: FACE_EDITOR_MODAL_HEIGHT, padding: 0, overflow: "hidden" } }}
+      styles={{
+        container: { padding: 0, background: "transparent", boxShadow: "none" },
+        body: { height: FACE_EDITOR_MODAL_HEIGHT, padding: 0, overflow: "hidden" },
+      }}
     >
       {modalOpen ? (
         <Seedance2FaceEditDialogInner
@@ -1043,20 +1046,27 @@ function Seedance2FaceEditDialogInner({
     <div
       ref={editorRef}
       tabIndex={-1}
-      className="grid h-full grid-rows-[64px_minmax(0,1fr)_68px] overflow-hidden rounded-xl bg-[#111318] text-slate-100 shadow-2xl"
+      className="relative grid h-full grid-rows-[64px_minmax(0,1fr)_68px] overflow-hidden rounded-xl bg-[#111318] text-slate-100 shadow-2xl"
     >
+        <button
+          type="button"
+          aria-label="关闭人脸迁移编辑器，不保存"
+          title="关闭，不保存"
+          disabled={isSaving}
+          className="absolute right-4 top-4 z-20 grid size-8 place-items-center rounded-md text-slate-400 transition hover:bg-white/10 hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 disabled:cursor-not-allowed disabled:opacity-40"
+          onClick={handleClose}
+        >
+          <X className="size-5" />
+        </button>
         <header className="grid grid-cols-[76px_minmax(0,1fr)_340px] border-b border-white/10 bg-[#171a21]">
           <div className="border-r border-white/10" />
-          <div className="flex min-w-0 items-center justify-between gap-4 px-5">
+          <div className="flex min-w-0 items-center px-5">
             <div className="min-w-0">
               <h2 className="truncate text-lg font-semibold tracking-wide">Seedance2 人脸迁移</h2>
               <div className="mt-0.5 text-xs text-slate-400">PS-style face editor shell · {imageLabel}</div>
             </div>
-            <Button icon={<X className="size-4" />} onClick={handleClose} disabled={isSaving}>
-              关闭，不保存
-            </Button>
           </div>
-          <div className="border-l border-white/10 px-4 py-3 text-sm text-slate-300">属性面板</div>
+          <div className="border-l border-white/10 px-4 py-3 pr-14 text-sm text-slate-300">属性面板</div>
         </header>
 
         <main className="grid min-h-0 grid-cols-[76px_minmax(0,1fr)_340px]">
@@ -1327,7 +1337,7 @@ function Seedance2FaceEditDialogInner({
                       />
                     </ControlRow>
                   </div>
-                  <ControlRow label="Rotation" value={`${Math.round(selection.rotation)}?`}>
+                  <ControlRow label="Rotation" value={`${Math.round(selection.rotation)}°`}>
                     <Slider
                       min={-180}
                       max={180}
@@ -1345,10 +1355,7 @@ function Seedance2FaceEditDialogInner({
         <footer className="grid grid-cols-[76px_minmax(0,1fr)_340px] border-t border-white/10 bg-[#171a21]">
           <div className="border-r border-white/10" />
             <div className="flex min-w-0 items-center px-5 text-sm text-slate-400">快捷键：Ctrl/Cmd + X / V；Ctrl/Cmd + Z 回退上一步（仅本窗口）；按住 Ctrl 可临时使用抓手拖动；滚轮缩放图片；抓手可拖动放大后的图片；点击窗口外、按 Esc 都不会关闭。</div>
-          <div className="flex items-center justify-end gap-2 border-l border-white/10 px-4">
-            <Button icon={<X className="size-4" />} onClick={handleClose} disabled={isSaving}>
-              关闭，不保存
-            </Button>
+          <div className="flex items-center justify-end border-l border-white/10 px-4">
             <Button
               type="primary"
               icon={<Save className="size-4" />}
