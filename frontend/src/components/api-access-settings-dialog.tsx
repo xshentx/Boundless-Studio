@@ -67,6 +67,19 @@ export function ApiAccessSettingsDialog() {
         setSettingsTab("relay");
     }, [open]);
 
+    useEffect(() => {
+        if (!open) return;
+
+        const appRoot = document.getElementById("root");
+        const rootWasInert = appRoot?.inert ?? false;
+        window.getSelection()?.removeAllRanges();
+        if (appRoot) appRoot.inert = true;
+
+        return () => {
+            if (appRoot) appRoot.inert = rootWasInert;
+        };
+    }, [open]);
+
     const close = () => {
         setOpen(false);
         clearPromptContinue();

@@ -157,7 +157,16 @@ export function createApiRelayProvider(input: Partial<ApiRelayProvider> = {}): A
 }
 
 export function normalizeApiRelayProvider(provider: ApiRelayProvider): ApiRelayProvider {
-    const models = normalizeModelList(provider.models);
+    const configuredModels = normalizeModelList(provider.models || []);
+    const hasConfiguredModelList = configuredModels.length > 0;
+    const models = hasConfiguredModelList
+        ? configuredModels
+        : mergeModelLists(provider.textModels || [], provider.imageModels || [], provider.videoModels || [], provider.audioModels || []);
+    const legacyGrokTextModels = models.filter(isLegacyGrokTextModelName);
+    const textModels = normalizeModelList(provider.textModels?.length ? provider.textModels : filterModelsByCapability(models, "text"));
+    const imageModels = normalizeModelList(provider.imageModels?.length ? provider.imageModels : filterModelsByCapability(models, "image"));
+    const videoModels = normalizeModelList(provider.videoModels?.length ? provider.videoModels : filterModelsByCapability(models, "video"));
+    const audioModels = normalizeModelList(provider.audioModels?.length ? provider.audioModels : filterModelsByCapability(models, "audio"));
     return {
         ...provider,
         name: provider.name.trim() || "中转 API",
@@ -166,10 +175,10 @@ export function normalizeApiRelayProvider(provider: ApiRelayProvider): ApiRelayP
         enabled: provider.enabled !== false,
         capabilities: normalizeCapabilities(provider.capabilities),
         models,
-        textModels: normalizeModelList(provider.textModels.length ? provider.textModels : filterModelsByCapability(models, "text")),
-        imageModels: normalizeModelList(provider.imageModels.length ? provider.imageModels : filterModelsByCapability(models, "image")),
-        videoModels: normalizeModelList(provider.videoModels.length ? provider.videoModels : filterModelsByCapability(models, "video")),
-        audioModels: normalizeModelList(provider.audioModels.length ? provider.audioModels : filterModelsByCapability(models, "audio")),
+        textModels: mergeModelLists(textModels, legacyGrokTextModels),
+        imageModels,
+        videoModels: videoModels.filter((model) => !legacyGrokTextModels.includes(model)),
+        audioModels,
         timeoutMs: Math.max(30_000, Math.min(900_000, Math.floor(Number(provider.timeoutMs) || defaultApiRelayAdvanced.defaultTimeoutMs))),
         remark: provider.remark || "",
     };
@@ -474,9 +483,14 @@ function preferredProviderForCapability(providers: ApiRelayProvider[], capabilit
 
 function isVideoModelName(model: string) {
     const value = model.toLowerCase();
-    return value.includes("seedance") || value.includes("video") || value.includes("sora") || value.includes("veo") || value.includes("kling") || value.includes("wan") || value.includes("hailuo") || value.includes("grok") || value.includes("imagine");
+    return value.includes("seedance") || value.includes("video") || value.includes("sora") || value.includes("veo") || value.includes("kling") || value.includes("wan") || value.includes("hailuo") || value.includes("imagine");
 }
 
+
+function isLegacyGrokTextModelName(model: string) {
+    const value = model.toLowerCase();
+    return value.includes("grok") && isTextModelName(model);
+}
 
 function isBlue22VideoRelay(provider: ApiRelayProvider) {
     const value = `${provider.name} ${provider.baseUrl} ${provider.remark}`.toLowerCase();

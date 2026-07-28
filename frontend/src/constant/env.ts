@@ -1,3 +1,3 @@
-export const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "1.0.2";
+export const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "1.0.3";
 
 export const DOCS_URL = process.env.NEXT_PUBLIC_DOC_URL || "https://docs.canvas.best";

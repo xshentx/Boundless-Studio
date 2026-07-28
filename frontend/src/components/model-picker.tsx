@@ -84,7 +84,7 @@ export function ModelSelectControl({
         >
             <SelectTrigger
                 className={cn(
-                    "model-select-trigger h-10 min-w-0 justify-start gap-2 rounded-xl border border-input bg-transparent px-3 text-sm font-normal shadow-sm transition-colors",
+                    "model-select-trigger h-10 min-w-0 select-none justify-start gap-2 rounded-xl border border-input bg-transparent px-3 text-sm font-normal shadow-sm transition-colors",
                     "data-[state=open]:border-ring data-[state=open]:ring-2 data-[state=open]:ring-ring/20",
                     triggerClassName,
                 )}
@@ -99,7 +99,7 @@ export function ModelSelectControl({
             </SelectTrigger>
             <SelectContent
                 data-canvas-no-zoom
-                className={cn("z-[1200] w-80 max-w-[calc(100vw-24px)] rounded-xl border border-border/70 bg-popover p-1 shadow-xl", contentClassName)}
+                className={cn("z-[1200] w-80 max-w-[calc(100vw-24px)] select-none rounded-xl border border-border/70 bg-popover p-1 shadow-xl", contentClassName)}
                 position="popper"
                 align={contentAlign}
                 side={contentSide}
