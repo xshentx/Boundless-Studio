@@ -1,8 +1,10 @@
+import { desktopApiUrl } from "@/services/desktop-api-url";
+
 export const LOCAL_RELAY_PROXY_PREFIX = "/local-relay-proxy";
 export const LOCAL_RELAY_BASE_URL_HEADER = "x-local-relay-base-url";
 
 export function buildLocalRelayProxyUrl(path: string) {
-    return `${LOCAL_RELAY_PROXY_PREFIX}/${path.replace(/^\/+/, "").replace(/\/+$/, "")}/`;
+    return desktopApiUrl(`${LOCAL_RELAY_PROXY_PREFIX}/${path.replace(/^\/+/, "").replace(/\/+$/, "")}/`);
 }
 
 export function buildLocalRelayProxyHeaders(provider: { baseUrl: string; apiKey: string }, contentType?: string) {

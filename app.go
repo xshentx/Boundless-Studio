@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -37,7 +38,17 @@ func (a *App) startup(ctx context.Context) {
 	a.ctxMu.Lock()
 	a.ctx = ctx
 	a.ctxMu.Unlock()
-	_ = a.relay.StartLoopback(ctx)
+	if err := a.relay.StartLoopback(ctx); err != nil {
+		message := fmt.Sprintf("本地服务启动失败，无法监听 127.0.0.1:%s。请关闭占用该端口的程序后重新启动。\n\n详细信息：%v", desktopAPIPort, err)
+		wailsruntime.LogError(ctx, message)
+		_, _ = wailsruntime.MessageDialog(ctx, wailsruntime.MessageDialogOptions{
+			Type:    wailsruntime.ErrorDialog,
+			Title:   "无界创作台启动失败",
+			Message: message,
+		})
+		wailsruntime.Quit(ctx)
+		return
+	}
 	a.ensureMainWindowIcon()
 	a.startSystemTray()
 	acknowledgeAppliedUpdate(os.Args)

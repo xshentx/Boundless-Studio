@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -39,6 +41,114 @@ func TestRelayHealth(t *testing.T) {
 func TestRejectsInvalidRelayURL(t *testing.T) {
 	if _, err := buildLocalRelayTarget("file:///tmp/data", "models", ""); err == nil {
 		t.Fatal("expected invalid URL error")
+	}
+}
+
+func TestDesktopLoopbackCORSAllowsWailsPreflight(t *testing.T) {
+	request := httptest.NewRequest(http.MethodOptions, "/local-relay-proxy/images/edits/", nil)
+	request.Header.Set("Origin", "wails://wails")
+	request.Header.Set("Access-Control-Request-Method", http.MethodPost)
+	request.Header.Set("Access-Control-Request-Headers", "content-type,x-local-relay-base-url,authorization")
+	response := httptest.NewRecorder()
+
+	desktopLoopbackCORS(http.NotFoundHandler()).ServeHTTP(response, request)
+
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("preflight status=%d want=%d", response.Code, http.StatusNoContent)
+	}
+	if got := response.Header().Get("Access-Control-Allow-Origin"); got != "wails://wails" {
+		t.Fatalf("allow origin=%q", got)
+	}
+	if got := response.Header().Get("Access-Control-Allow-Headers"); got == "" {
+		t.Fatal("missing allowed request headers")
+	}
+}
+
+func TestDesktopLoopbackCORSRejectsUnknownBrowserOrigin(t *testing.T) {
+	called := false
+	request := httptest.NewRequest(http.MethodPost, "/client-api/media?key=image", bytes.NewReader([]byte("data")))
+	request.Header.Set("Origin", "https://example.com")
+	response := httptest.NewRecorder()
+
+	desktopLoopbackCORS(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		called = true
+	})).ServeHTTP(response, request)
+
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("unknown-origin status=%d want=%d", response.Code, http.StatusForbidden)
+	}
+	if called {
+		t.Fatal("unknown browser origin reached the desktop handler")
+	}
+}
+
+func TestDesktopLoopbackConfiguredUpstreamPreservesJSONRequestBody(t *testing.T) {
+	wantBody := []byte(`{"username":"tester","password":"secret"}`)
+	var gotBody []byte
+	var gotPath string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":0,"data":{},"msg":""}`))
+	}))
+	defer upstream.Close()
+
+	server := newTestRelayServer(t)
+	server.mu.Lock()
+	server.config.UpstreamURL = upstream.URL
+	server.mu.Unlock()
+	request := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(wantBody))
+	request.Header.Set("Origin", "wails://wails")
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+
+	desktopLoopbackCORS(server.Handler()).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("configured upstream status=%d body=%s", response.Code, response.Body.String())
+	}
+	if gotPath != "/api/auth/login" {
+		t.Fatalf("upstream path=%q", gotPath)
+	}
+	if !bytes.Equal(gotBody, wantBody) {
+		t.Fatalf("upstream body=%q want=%q", gotBody, wantBody)
+	}
+}
+
+func TestDesktopLoopbackRelayPreservesMultipartRequestBody(t *testing.T) {
+	wantBody := []byte("--boundary\r\nContent-Disposition: form-data; name=\"prompt\"\r\n\r\nhello\r\n--boundary--\r\n")
+	var gotBody []byte
+	var gotPath string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	}))
+	defer upstream.Close()
+
+	server := newTestRelayServer(t)
+	request := httptest.NewRequest(http.MethodPost, "/local-relay-proxy/images/edits/", bytes.NewReader(wantBody))
+	request.Header.Set("Origin", "wails://wails")
+	request.Header.Set("Content-Type", "multipart/form-data; boundary=boundary")
+	request.Header.Set("x-local-relay-base-url", upstream.URL)
+	request.Header.Set("Authorization", "Bearer test")
+	response := httptest.NewRecorder()
+
+	desktopLoopbackCORS(server.Handler()).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("relay status=%d body=%s", response.Code, response.Body.String())
+	}
+	if gotPath != "/v1/images/edits" {
+		t.Fatalf("upstream path=%q", gotPath)
+	}
+	if !bytes.Equal(gotBody, wantBody) {
+		t.Fatalf("upstream body=%q want=%q", gotBody, wantBody)
+	}
+	if got := response.Header().Get("Access-Control-Allow-Origin"); got != "wails://wails" {
+		t.Fatalf("allow origin=%q", got)
 	}
 }
 

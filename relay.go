@@ -548,7 +548,7 @@ func (s *RelayServer) StartLoopback(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	server := &http.Server{Handler: s.Handler(), ReadHeaderTimeout: 15 * time.Second}
+	server := &http.Server{Handler: desktopLoopbackCORS(s.Handler()), ReadHeaderTimeout: 15 * time.Second}
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -557,6 +557,40 @@ func (s *RelayServer) StartLoopback(ctx context.Context) error {
 	}()
 	go func() { _ = server.Serve(listener) }()
 	return nil
+}
+
+func desktopLoopbackCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := strings.TrimSpace(r.Header.Get("Origin"))
+		if origin != "" && !isAllowedDesktopOrigin(origin) {
+			writeJSONError(w, http.StatusForbidden, "desktop loopback origin is not allowed")
+			return
+		}
+		if origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Local-Relay-Base-Url, X-Webdav-Target, X-Webdav-Method, X-Webdav-Authorization, X-Webdav-Depth, X-Webdav-Destination, X-Webdav-Overwrite, X-Webdav-Content-Type")
+			w.Header().Set("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges")
+			w.Header().Set("Vary", "Origin")
+			if strings.EqualFold(r.Header.Get("Access-Control-Request-Private-Network"), "true") {
+				w.Header().Set("Access-Control-Allow-Private-Network", "true")
+			}
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func isAllowedDesktopOrigin(origin string) bool {
+	switch strings.ToLower(strings.TrimSpace(origin)) {
+	case "wails://wails", "http://wails.localhost", "https://wails.localhost", "http://127.0.0.1:34115", "http://localhost:34115":
+		return true
+	default:
+		return false
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {

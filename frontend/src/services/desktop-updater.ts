@@ -24,7 +24,7 @@ export type DesktopUpdateState = {
 
 export const emptyUpdateState: DesktopUpdateState = {
     phase: "idle",
-    currentVersion: "1.0.6",
+    currentVersion: "1.0.7",
     latestVersion: "",
     available: false,
     releaseName: "",

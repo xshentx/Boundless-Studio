@@ -2,6 +2,7 @@ import axios, {AxiosError, type AxiosRequestConfig} from "axios";
 
 import webConfig from "@/constants/common-env";
 import {clearAuthSessionCache} from "@/lib/auth-session";
+import {desktopApiUrl} from "@/services/desktop-api-url";
 import {clearStoredAuthSession, getStoredAuthKey} from "@/store/auth";
 
 type RequestConfig = AxiosRequestConfig & {
@@ -155,7 +156,7 @@ type RequestOptions = {
 export async function httpRequest<T>(path: string, options: RequestOptions = {}) {
     const {method = "GET", body, headers, redirectOnUnauthorized = true} = options;
     const config: RequestConfig = {
-        url: path,
+        url: desktopApiUrl(path),
         method,
         data: body,
         headers,

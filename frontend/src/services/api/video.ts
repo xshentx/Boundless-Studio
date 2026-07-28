@@ -1,5 +1,7 @@
 import axios from "axios";
 
+import { desktopApiUrl } from "@/services/desktop-api-url";
+
 import { dataUrlToFile } from "@/lib/image-utils";
 import { resolveApiRequestRoute, routedLocalApiUrl, routedLocalHeaders, type ApiRequestRoute } from "@/services/api/ai-routing";
 import { getMediaBlob, uploadMediaFile, type UploadedFile } from "@/services/file-storage";
@@ -390,7 +392,7 @@ async function uploadReferenceMedia(file: File) {
     if (!token) throw new Error("使用本地参考素材需要先登录，并在服务端配置 PUBLIC_BASE_URL");
     const body = new FormData();
     body.append("file", file, file.name);
-    const response = await axios.post<ApiEnvelope<ReferenceMediaUploadResponse>>("/api/v1/media/references", body, { headers: { Authorization: `Bearer ${token}` } });
+    const response = await axios.post<ApiEnvelope<ReferenceMediaUploadResponse>>(desktopApiUrl("/api/v1/media/references"), body, { headers: { Authorization: `Bearer ${token}` } });
     const payload = unwrapEnvelope(response.data, "参考素材上传失败");
     if (!payload.url) throw new Error("参考素材上传后没有返回公网 URL");
     return payload.url;

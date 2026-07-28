@@ -1,5 +1,7 @@
 "use client";
 
+import { desktopApiUrl } from "@/services/desktop-api-url";
+
 export type DesktopMediaRecord = {
     storageKey: string;
     relativePath: string;
@@ -31,13 +33,13 @@ async function responseMessage(response: Response) {
 }
 
 function stateURL(key: string) {
-    return `/client-api/state?${new URLSearchParams({ key })}`;
+    return desktopApiUrl(`/client-api/state?${new URLSearchParams({ key })}`);
 }
 
 function mediaURL(key: string, retained?: boolean) {
     const params = new URLSearchParams({ key });
     if (retained !== undefined) params.set("retained", String(retained));
-    return `/client-api/media?${params}`;
+    return desktopApiUrl(`/client-api/media?${params}`);
 }
 
 export async function getDesktopState(key: string): Promise<string | null> {
@@ -118,7 +120,7 @@ export async function removeDesktopSetting(key: string) {
 }
 
 export async function clearDesktopCanvasData() {
-    const response = await fetch("/client-api/canvas-data", { method: "DELETE" });
+    const response = await fetch(desktopApiUrl("/client-api/canvas-data"), { method: "DELETE" });
     if (!response.ok) throw new DesktopStorageUnavailableError(await responseMessage(response));
 }
 
@@ -169,7 +171,7 @@ export async function listDesktopMedia(category?: DesktopMediaRecord["category"]
     const params = new URLSearchParams();
     if (category) params.set("category", category);
     const suffix = params.size ? `?${params}` : "";
-    const response = await fetch(`/client-api/media-index${suffix}`, { cache: "no-store" });
+    const response = await fetch(desktopApiUrl(`/client-api/media-index${suffix}`), { cache: "no-store" });
     if (!response.ok) throw new DesktopStorageUnavailableError(await responseMessage(response));
     return ((await response.json()) as MediaIndexResponse).items;
 }
