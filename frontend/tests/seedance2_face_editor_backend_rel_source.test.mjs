@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,6 +14,11 @@ assert.match(
   source,
   /function\s+seedance2FaceEditFallbackSource/,
   "Seedance2 face edit should centralize fallback source selection",
+);
+assert.match(
+  source,
+  /const backendRel = normalizeCanvasBackendRel\(metadata\?\.backendRel\)/,
+  "Seedance2 face edit must reject backendRel route traversal before creating a same-origin URL",
 );
 assert.match(
   source,

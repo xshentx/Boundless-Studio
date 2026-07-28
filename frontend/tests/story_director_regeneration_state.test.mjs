@@ -166,18 +166,35 @@ assert.match(
   "failed direct regeneration must release its task recovery guards",
 );
 
-const resumeImageTaskSource = sourceBetween(
+const resumeImageTaskStart = source.indexOf(
   "const resumeCanvasImageTask = useCallback(",
-  "  useEffect(() => {\n    if (!projectLoaded) return;\n    nodes",
+);
+const resumeImageEffectStart = source.indexOf(
+  "  useEffect(() => {",
+  resumeImageTaskStart,
+);
+const resumeImageEffectEnd = source.indexOf(
+  "  useEffect(() => {",
+  resumeImageEffectStart + 1,
+);
+assert.ok(
+  resumeImageTaskStart >= 0 &&
+    resumeImageEffectStart > resumeImageTaskStart &&
+    resumeImageEffectEnd > resumeImageEffectStart,
+  "unable to extract resumed image task lifecycle",
+);
+const resumeImageTaskSource = source.slice(
+  resumeImageTaskStart,
+  resumeImageEffectStart,
 );
 assert.doesNotMatch(
   resumeImageTaskSource,
   /sourceImageTaskId === taskId &&\s*!node\.metadata\?\.content/,
   "a resumed in-place regeneration failure must not be hidden by retained content",
 );
-const resumeImageEffectSource = sourceBetween(
-  "  useEffect(() => {\n    if (!projectLoaded) return;\n    nodes",
-  "  useEffect(() => {\n    if (!projectLoaded) return;\n    if (viewportSaveTimerRef.current)",
+const resumeImageEffectSource = source.slice(
+  resumeImageEffectStart,
+  resumeImageEffectEnd,
 );
 assert.match(
   resumeImageEffectSource,

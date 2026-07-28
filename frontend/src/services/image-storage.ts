@@ -17,25 +17,36 @@ export type UploadedImage = {
 
 type StoredImageRecord = { blob: Blob; createdAt: number; lastAccessedAt?: number; retained?: boolean };
 type StoredImage = Blob | StoredImageRecord;
-type UploadImageOptions = { retained?: boolean };
+type UploadImageOptions = { retained?: boolean; signal?: AbortSignal };
 
 const legacyStore = localforage.createInstance({ name: "infinite-canvas", storeName: "image_files" });
 const objectUrls = new Map<string, string>();
 export const CANVAS_IMAGE_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 export async function uploadImage(input: string | Blob, options: UploadImageOptions = {}): Promise<UploadedImage> {
-    const blob = typeof input === "string" ? await fetchImageBlob(input) : input;
+    const blob = typeof input === "string" ? await fetchImageBlob(input, options.signal) : input;
+    throwIfUploadAborted(options.signal);
     assertNonEmptyImageBlob(blob);
     const storageKey = `image:${nanoid()}`;
+    let stored = false;
     try {
-        await uploadDesktopMedia(storageKey, blob, Boolean(options.retained));
-    } catch {
-        const now = Date.now();
-        await legacyStore.setItem(storageKey, { blob, createdAt: now, lastAccessedAt: now, retained: Boolean(options.retained) });
+        try {
+            await uploadDesktopMedia(storageKey, blob, Boolean(options.retained));
+        } catch (error) {
+            throwIfUploadAborted(options.signal, error);
+            const now = Date.now();
+            await legacyStore.setItem(storageKey, { blob, createdAt: now, lastAccessedAt: now, retained: Boolean(options.retained) });
+        }
+        stored = true;
+        throwIfUploadAborted(options.signal);
+        const url = replaceObjectURL(storageKey, blob);
+        const meta = await readImageMeta(url);
+        throwIfUploadAborted(options.signal);
+        return { url, storageKey, width: meta.width, height: meta.height, bytes: blob.size, mimeType: blob.type || meta.mimeType };
+    } catch (error) {
+        if (stored && options.signal?.aborted) await deleteStoredImages([storageKey]);
+        throw error;
     }
-    const url = replaceObjectURL(storageKey, blob);
-    const meta = await readImageMeta(url);
-    return { url, storageKey, width: meta.width, height: meta.height, bytes: blob.size, mimeType: blob.type || meta.mimeType };
 }
 
 export async function resolveImageUrl(storageKey?: string, fallback = "") {
@@ -233,8 +244,8 @@ function blobToDataUrl(blob: Blob) {
     });
 }
 
-async function fetchImageBlob(url: string) {
-    const response = await fetch(normalizeFetchUrl(url));
+async function fetchImageBlob(url: string, signal?: AbortSignal) {
+    const response = await fetch(normalizeFetchUrl(url), { signal });
     if (!response.ok) {
         const message = await response.text().catch(() => "");
         throw new Error(readFetchError(message, response.status));
@@ -242,6 +253,13 @@ async function fetchImageBlob(url: string) {
     const blob = await response.blob();
     assertNonEmptyImageBlob(blob);
     return blob;
+}
+
+function throwIfUploadAborted(signal?: AbortSignal, fallback?: unknown): void {
+    if (!signal?.aborted) return;
+    if (signal.reason !== undefined) throw signal.reason;
+    if (fallback !== undefined) throw fallback;
+    throw new DOMException("The image upload was aborted", "AbortError");
 }
 
 function assertNonEmptyImageBlob(blob: Blob) {

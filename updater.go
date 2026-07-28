@@ -510,12 +510,13 @@ func launchUpdateHelper(preparedPath string) error {
 	if err != nil {
 		return err
 	}
+	targetExecutable := resolveUpdateTargetExecutable(executable)
 	updatesDir := filepath.Dir(preparedPath)
 	helperPath := filepath.Join(updatesDir, fmt.Sprintf("BoundlessStudio-updater-%d.exe", time.Now().UnixMilli()))
 	if err := copyFile(executable, helperPath); err != nil {
 		return fmt.Errorf("无法创建更新辅助程序: %w", err)
 	}
-	command := exec.Command(helperPath, updateHelperArgument, preparedPath, executable, strconv.Itoa(os.Getpid()))
+	command := exec.Command(helperPath, updateHelperArgument, preparedPath, targetExecutable, updatesDir, strconv.Itoa(os.Getpid()))
 	command.Dir = filepath.Dir(executable)
 	configureUpdateHelperCommand(command)
 	if err := command.Start(); err != nil {

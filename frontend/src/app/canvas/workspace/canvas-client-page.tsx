@@ -416,6 +416,7 @@ const CANVAS_FILE_GRID_GAP_X = 420;
 const CANVAS_FILE_GRID_GAP_Y = 320;
 const CANVAS_RESTORE_TIMEOUT_MS = 4_000;
 const CANVAS_RESTORE_ITEM_TIMEOUT_MS = 800;
+const CANVAS_RECOVERY_SOURCE_TIMEOUT_MS = 12_000;
 const CANVAS_RESTORE_CHUNK_SIZE = 6;
 const XIAOJUN_TEACHER_RECOVERY_PROJECT_ID = "gqtgAPRgMApfbQ0Ar0iJq__merged_admin";
 const XIAOJUN_TEACHER_RECOVERY_ALIASES = new Set([
@@ -1945,6 +1946,7 @@ function InfiniteCanvasPage() {
     setRestoreError(null);
     if (!hydrated) return;
     let cancelled = false;
+    const mediaRestoreController = new AbortController();
 
     const restoreProjectState = async (targetProject: CanvasProject) => {
       try {
@@ -2006,9 +2008,9 @@ function InfiniteCanvasPage() {
               const hydratedNodes = withImageSequenceNumbers(
                 sanitizeCanvasNodes(
                   normalizeConfigNodeSize(
-                    await withCanvasRestoreTimeout(
-                      hydrateCanvasImages(initialNodes),
+                    await hydrateCanvasImages(
                       initialNodes,
+                      mediaRestoreController.signal,
                     ),
                   ),
                 ),
@@ -2022,29 +2024,46 @@ function InfiniteCanvasPage() {
                 restoredConnections,
               );
               const restoredSessions = await withCanvasRestoreTimeout(
-                hydrateAssistantImages(sourceSessions),
+                hydrateAssistantImages(
+                  sourceSessions,
+                  mediaRestoreController.signal,
+                ),
                 sourceSessions,
               );
-              if (cancelled) return;
-              setNodes(restoredNodes);
-              setConnections(restoredConnections);
-              setChatSessions(restoredSessions);
-              historyRef.current = { past: [], future: [] };
-              if (historyCommitTimerRef.current) {
-                clearTimeout(historyCommitTimerRef.current);
-                historyCommitTimerRef.current = null;
-              }
-              lastHistoryRef.current = {
-                nodes: restoredNodes,
-                connections: restoredConnections,
-                chatSessions: restoredSessions,
-                activeChatId: targetProject.activeChatId || null,
-                backgroundMode: targetProject.backgroundMode,
-                showImageInfo: targetProject.showImageInfo || false,
+              if (cancelled || mediaRestoreController.signal.aborted) return;
+              const mergeHistoryEntry = (entry: CanvasHistoryEntry) =>
+                mergeHydratedCanvasHistoryEntry(
+                  entry,
+                  initialNodes,
+                  restoredNodes,
+                  sourceSessions,
+                  restoredSessions,
+                );
+              historyRef.current = {
+                past: historyRef.current.past.map(mergeHistoryEntry),
+                future: historyRef.current.future.map(mergeHistoryEntry),
               };
-              setHistoryState({ canUndo: false, canRedo: false });
+              if (lastHistoryRef.current)
+                lastHistoryRef.current = mergeHistoryEntry(
+                  lastHistoryRef.current,
+                );
+              setNodes((currentNodes) =>
+                mergeHydratedCanvasMedia(
+                  currentNodes,
+                  initialNodes,
+                  restoredNodes,
+                ),
+              );
+              setChatSessions((currentSessions) =>
+                mergeHydratedAssistantMedia(
+                  currentSessions,
+                  sourceSessions,
+                  restoredSessions,
+                ),
+              );
             } catch (error) {
-              console.warn("Canvas media restore skipped", error);
+              if (!mediaRestoreController.signal.aborted)
+                console.warn("Canvas media restore skipped", error);
             }
           })();
         }, 0);
@@ -2076,6 +2095,7 @@ function InfiniteCanvasPage() {
       });
       return () => {
         cancelled = true;
+        mediaRestoreController.abort();
       };
     }
     if (!project) {
@@ -2089,6 +2109,7 @@ function InfiniteCanvasPage() {
     void restoreProjectState(project);
     return () => {
       cancelled = true;
+      mediaRestoreController.abort();
     };
   }, [createProject, hydrated, openProject, projectId, replaceProjects, router]);
 
@@ -2239,7 +2260,7 @@ function InfiniteCanvasPage() {
     async (nodeId: string, taskId: string) => {
       try {
         const generated = await pollCanvasImageTask(taskId);
-        const uploaded = await uploadImage(generated.dataUrl);
+        const uploaded = await uploadImage(generated.dataUrl, CANVAS_RETAINED_IMAGE_UPLOAD_OPTIONS);
         const nextNodes = reconcileStoryDirectorImageResults(
           nodesRef.current.map((node) =>
             node.id === nodeId &&
@@ -4014,7 +4035,7 @@ function InfiniteCanvasPage() {
       frame: { dataUrl: string; width: number; height: number; currentTime: number },
     ) => {
       try {
-        const uploaded = await uploadImage(frame.dataUrl);
+        const uploaded = await uploadImage(frame.dataUrl, CANVAS_RETAINED_IMAGE_UPLOAD_OPTIONS);
         const naturalWidth = frame.width || uploaded.width || sourceNode.width;
         const naturalHeight = frame.height || uploaded.height || sourceNode.height;
         const aspectRatio = naturalWidth && naturalHeight ? naturalWidth / naturalHeight : 1;
@@ -4237,7 +4258,7 @@ function InfiniteCanvasPage() {
           storageKey: sourceNode.metadata.storageKey,
         });
         if (!dataUrl) return message.error("读取画布图片失败");
-        const uploaded = await uploadImage(dataUrl);
+        const uploaded = await uploadImage(dataUrl, CANVAS_RETAINED_IMAGE_UPLOAD_OPTIONS);
         replaceNodeWithImage(
           targetNode.id,
           sourceNode.title || "画布图片",
@@ -5915,7 +5936,7 @@ function InfiniteCanvasPage() {
                 { useReferenceLabels: true },
               );
               const generated = await pollCanvasImageTask(pollTaskId);
-              const uploaded = await uploadImage(generated.dataUrl);
+              const uploaded = await uploadImage(generated.dataUrl, CANVAS_RETAINED_IMAGE_UPLOAD_OPTIONS);
               const size = imageNodeSize(
                 uploaded.width,
                 uploaded.height,
@@ -6200,7 +6221,7 @@ function InfiniteCanvasPage() {
                   { useReferenceLabels: true },
                 );
                 const generated = await pollCanvasImageTask(pollTaskId);
-                const uploaded = await uploadImage(generated.dataUrl);
+                const uploaded = await uploadImage(generated.dataUrl, CANVAS_RETAINED_IMAGE_UPLOAD_OPTIONS);
                 applyPersistedNodes((prev) =>
                   prev.map((item) =>
                     item.id === nodeId
@@ -6357,7 +6378,7 @@ function InfiniteCanvasPage() {
                 { useReferenceLabels: true },
               );
               const generated = await pollCanvasImageTask(pollTaskId);
-              const uploaded = await uploadImage(generated.dataUrl);
+              const uploaded = await uploadImage(generated.dataUrl, CANVAS_RETAINED_IMAGE_UPLOAD_OPTIONS);
               applyPersistedNodes((prev) =>
                 prev.map((item) =>
                   item.id === nodeId
@@ -6550,7 +6571,7 @@ function InfiniteCanvasPage() {
       if (!node.metadata?.content) return;
       touchNodeImage(node);
       const cropped = await cropDataUrl(node.metadata.content, crop);
-      const image = await uploadImage(cropped);
+      const image = await uploadImage(cropped, CANVAS_RETAINED_IMAGE_UPLOAD_OPTIONS);
       const width = Math.min(node.width, Math.max(220, image.width));
       const childId = nanoid();
       const child: CanvasNodeData = {
@@ -6582,7 +6603,7 @@ function InfiniteCanvasPage() {
     async (node: CanvasNodeData, payload: CanvasImageLayerEditPayload) => {
       if (!node.metadata?.content) return;
       touchNodeImage(node);
-      const image = await uploadImage(payload.dataUrl);
+      const image = await uploadImage(payload.dataUrl, CANVAS_RETAINED_IMAGE_UPLOAD_OPTIONS);
       const size = imageNodeSize(image.width, image.height, node.width);
       const childId = nanoid();
       const child: CanvasNodeData = {
@@ -6630,7 +6651,7 @@ function InfiniteCanvasPage() {
         if (originalStorageKey) {
           await setStoredImagesRetained([originalStorageKey], true);
         }
-        const uploaded = await uploadImage(payload.dataUrl);
+        const uploaded = await uploadImage(payload.dataUrl, CANVAS_RETAINED_IMAGE_UPLOAD_OPTIONS);
         const metadata = imageMetadata(uploaded);
         setNodes((prev) =>
           prev.map((item) =>
@@ -6716,7 +6737,7 @@ function InfiniteCanvasPage() {
       let nextSequenceNumber = nextImageSequenceNumber(nodesRef.current);
       const childNodes = await Promise.all(
         pieces.map(async (piece) => {
-          const image = await uploadImage(piece.dataUrl);
+          const image = await uploadImage(piece.dataUrl, CANVAS_RETAINED_IMAGE_UPLOAD_OPTIONS);
           const id = nanoid();
           return {
             id,
@@ -6815,7 +6836,7 @@ function InfiniteCanvasPage() {
         const taskId = `canvas-${childId}`;
         const pollTaskId = await submitCanvasImageTask(taskId, generationConfig, prompt, [source]);
         const image = await pollCanvasImageTask(pollTaskId);
-        const uploaded = await uploadImage(image.dataUrl);
+        const uploaded = await uploadImage(image.dataUrl, CANVAS_RETAINED_IMAGE_UPLOAD_OPTIONS);
         const size = imageNodeSize(uploaded.width, uploaded.height, node.width);
         setNodes((prev) =>
           prev.map((item) =>
@@ -6931,7 +6952,7 @@ function InfiniteCanvasPage() {
         const taskId = `canvas-${childId}`;
         const pollTaskId = await submitCanvasImageTask(taskId, generationConfig, prompt, [source]);
         const image = await pollCanvasImageTask(pollTaskId);
-        const uploaded = await uploadImage(image.dataUrl);
+        const uploaded = await uploadImage(image.dataUrl, CANVAS_RETAINED_IMAGE_UPLOAD_OPTIONS);
         const size = imageNodeSize(
           uploaded.width,
           uploaded.height,
@@ -7049,7 +7070,7 @@ function InfiniteCanvasPage() {
         const taskId = `canvas-${childId}`;
         const pollTaskId = await submitCanvasImageTask(taskId, generationConfig, prompt, [source]);
         const image = await pollCanvasImageTask(pollTaskId);
-        const uploaded = await uploadImage(image.dataUrl);
+        const uploaded = await uploadImage(image.dataUrl, CANVAS_RETAINED_IMAGE_UPLOAD_OPTIONS);
         const size = imageNodeSize(
           uploaded.width,
           uploaded.height,
@@ -8633,7 +8654,7 @@ function InfiniteCanvasPage() {
                   { useReferenceLabels: true },
                 );
                 const image = await pollCanvasImageTask(pollTaskId);
-                const uploaded = await uploadImage(image.dataUrl);
+                const uploaded = await uploadImage(image.dataUrl, CANVAS_RETAINED_IMAGE_UPLOAD_OPTIONS);
                 const imageConfig = NODE_DEFAULT_SIZE[CanvasNodeType.Image];
                 const imageSize = imageNodeSize(
                   uploaded.width,
@@ -8924,7 +8945,7 @@ function InfiniteCanvasPage() {
                     editReferences,
                   );
                   const image = await pollCanvasImageTask(pollTaskId);
-                  const uploaded = await uploadImage(image.dataUrl);
+                  const uploaded = await uploadImage(image.dataUrl, CANVAS_RETAINED_IMAGE_UPLOAD_OPTIONS);
                   hasSuccess = true;
                   const imageSize = imageNodeSize(
                     uploaded.width,
@@ -9223,7 +9244,7 @@ function InfiniteCanvasPage() {
                   },
                 );
                 const image = await pollCanvasImageTask(pollTaskId);
-                const uploaded = await uploadImage(image.dataUrl);
+                const uploaded = await uploadImage(image.dataUrl, CANVAS_RETAINED_IMAGE_UPLOAD_OPTIONS);
                 hasSuccess = true;
                 const imageSize = imageNodeSize(
                   uploaded.width,
@@ -10070,7 +10091,7 @@ function InfiniteCanvasPage() {
           },
         );
         const image = await pollCanvasImageTask(pollTaskId);
-        const uploadedImage = await uploadImage(image.dataUrl);
+        const uploadedImage = await uploadImage(image.dataUrl, CANVAS_RETAINED_IMAGE_UPLOAD_OPTIONS);
         const imageConfig = NODE_DEFAULT_SIZE[CanvasNodeType.Image];
         const imageSize = imageNodeSize(
           uploadedImage.width,
@@ -10267,6 +10288,8 @@ function InfiniteCanvasPage() {
 
   const insertAssistantImage = useCallback(
     async (image: CanvasAssistantImage) => {
+      if (image.storageKey)
+        await setStoredImagesRetained([image.storageKey], true);
       const storedImage = image.storageKey
         ? {
             url: image.dataUrl,
@@ -10276,7 +10299,7 @@ function InfiniteCanvasPage() {
             bytes: 0,
             mimeType: "image/png",
           }
-        : await uploadImage(image.dataUrl);
+        : await uploadImage(image.dataUrl, CANVAS_RETAINED_IMAGE_UPLOAD_OPTIONS);
       const meta =
         storedImage.width === 1 && storedImage.height === 1
           ? await readImageMeta(storedImage.url)
@@ -11796,6 +11819,7 @@ function imageMetadata(
     naturalHeight: image.height,
     bytes: image.bytes,
     mimeType: image.mimeType,
+    retained: true,
   };
 }
 
@@ -11908,7 +11932,7 @@ async function resolveSavedReferenceUrls(urls: string[] | undefined) {
   return references.every(Boolean) ? (references as ReferenceImage[]) : null;
 }
 
-async function hydrateCanvasImages(nodes: CanvasNodeData[]) {
+async function hydrateCanvasImages(nodes: CanvasNodeData[], signal?: AbortSignal) {
   const restored = [...nodes];
   for (
     let index = 0;
@@ -11918,15 +11942,148 @@ async function hydrateCanvasImages(nodes: CanvasNodeData[]) {
     const chunk = await Promise.all(
       nodes
         .slice(index, index + CANVAS_RESTORE_CHUNK_SIZE)
-        .map(hydrateCanvasNode),
+        .map((node) => hydrateCanvasNode(node, signal)),
     );
+    if (signal?.aborted) throw signal.reason;
     restored.splice(index, chunk.length, ...chunk);
     await yieldToBrowser();
   }
   return restored;
 }
 
-async function hydrateCanvasNode(node: CanvasNodeData) {
+const CANVAS_MEDIA_SOURCE_KEYS: (keyof CanvasNodeMetadata)[] = [
+  "content",
+  "storageKey",
+  "backendUrl",
+  "backendRel",
+  "sourceImageTaskId",
+  "status",
+  "errorDetails",
+  "retained",
+];
+
+function mergeHydratedCanvasMedia(
+  currentNodes: CanvasNodeData[],
+  sourceNodes: CanvasNodeData[],
+  hydratedNodes: CanvasNodeData[],
+) {
+  const sourceById = new Map(sourceNodes.map((node) => [node.id, node]));
+  const hydratedById = new Map(hydratedNodes.map((node) => [node.id, node]));
+  return currentNodes.map((currentNode) => {
+    const sourceNode = sourceById.get(currentNode.id);
+    const hydratedNode = hydratedById.get(currentNode.id);
+    if (
+      !sourceNode ||
+      !hydratedNode ||
+      currentNode.type !== sourceNode.type ||
+      currentNode.type !== hydratedNode.type ||
+      !CANVAS_MEDIA_SOURCE_KEYS.every((key) =>
+        Object.is(currentNode.metadata?.[key], sourceNode.metadata?.[key]),
+      )
+    )
+      return currentNode;
+    return {
+      ...currentNode,
+      metadata: {
+        ...currentNode.metadata,
+        content: hydratedNode.metadata?.content,
+        storageKey: hydratedNode.metadata?.storageKey,
+        backendUrl: hydratedNode.metadata?.backendUrl,
+        backendRel: hydratedNode.metadata?.backendRel,
+        status: hydratedNode.metadata?.status,
+        errorDetails: hydratedNode.metadata?.errorDetails,
+        sourceImageTaskId: hydratedNode.metadata?.sourceImageTaskId,
+        naturalWidth: hydratedNode.metadata?.naturalWidth,
+        naturalHeight: hydratedNode.metadata?.naturalHeight,
+        bytes: hydratedNode.metadata?.bytes,
+        mimeType: hydratedNode.metadata?.mimeType,
+        retained: hydratedNode.metadata?.retained,
+      },
+    };
+  });
+}
+
+function mergeHydratedAssistantMedia(
+  currentSessions: CanvasAssistantSession[],
+  sourceSessions: CanvasAssistantSession[],
+  hydratedSessions: CanvasAssistantSession[],
+) {
+  const sourceById = new Map(sourceSessions.map((session) => [session.id, session]));
+  const hydratedById = new Map(
+    hydratedSessions.map((session) => [session.id, session]),
+  );
+  return currentSessions.map((currentSession) => {
+    const sourceSession = sourceById.get(currentSession.id);
+    const hydratedSession = hydratedById.get(currentSession.id);
+    if (!sourceSession || !hydratedSession) return currentSession;
+    const sourceMessages = new Map(
+      sourceSession.messages.map((message) => [message.id, message]),
+    );
+    const hydratedMessages = new Map(
+      hydratedSession.messages.map((message) => [message.id, message]),
+    );
+    return {
+      ...currentSession,
+      messages: currentSession.messages.map((currentMessage) => {
+        const sourceMessage = sourceMessages.get(currentMessage.id);
+        const hydratedMessage = hydratedMessages.get(currentMessage.id);
+        if (!sourceMessage || !hydratedMessage) return currentMessage;
+        return {
+          ...currentMessage,
+          references: mergeHydratedAssistantItems(
+            currentMessage.references || [],
+            sourceMessage.references || [],
+            hydratedMessage.references || [],
+          ),
+          images: mergeHydratedAssistantItems(
+            currentMessage.images || [],
+            sourceMessage.images || [],
+            hydratedMessage.images || [],
+          ),
+        };
+      }),
+    };
+  });
+}
+
+function mergeHydratedCanvasHistoryEntry(
+  entry: CanvasHistoryEntry,
+  sourceNodes: CanvasNodeData[],
+  hydratedNodes: CanvasNodeData[],
+  sourceSessions: CanvasAssistantSession[],
+  hydratedSessions: CanvasAssistantSession[],
+): CanvasHistoryEntry {
+  return {
+    ...entry,
+    nodes: mergeHydratedCanvasMedia(entry.nodes, sourceNodes, hydratedNodes),
+    chatSessions: mergeHydratedAssistantMedia(
+      entry.chatSessions,
+      sourceSessions,
+      hydratedSessions,
+    ),
+  };
+}
+
+function mergeHydratedAssistantItems<
+  T extends { id: string; dataUrl?: string; storageKey?: string },
+>(currentItems: T[], sourceItems: T[], hydratedItems: T[]) {
+  const sourceById = new Map(sourceItems.map((item) => [item.id, item]));
+  const hydratedById = new Map(hydratedItems.map((item) => [item.id, item]));
+  return currentItems.map((currentItem) => {
+    const sourceItem = sourceById.get(currentItem.id);
+    const hydratedItem = hydratedById.get(currentItem.id);
+    if (
+      !sourceItem ||
+      !hydratedItem ||
+      currentItem.storageKey !== sourceItem.storageKey ||
+      currentItem.dataUrl !== sourceItem.dataUrl
+    )
+      return currentItem;
+    return { ...currentItem, dataUrl: hydratedItem.dataUrl } as T;
+  });
+}
+
+async function hydrateCanvasNode(node: CanvasNodeData, signal?: AbortSignal) {
   try {
     const content = node.metadata?.content || "";
     if (
@@ -11944,47 +12101,161 @@ async function hydrateCanvasNode(node: CanvasNodeData) {
         metadata: { ...node.metadata, content: resolved || content },
       };
     }
+    if (node.type !== CanvasNodeType.Image) return node;
     if (
-      node.type !== CanvasNodeType.Image ||
-      (!content && !node.metadata?.backendUrl && !node.metadata?.storageKey)
+      !content &&
+      !node.metadata?.backendUrl &&
+      !node.metadata?.backendRel &&
+      !node.metadata?.storageKey
     )
       return node;
-    if (node.metadata?.storageKey) {
-      const resolved = await withCanvasRestoreTimeout(
-        resolveImageUrl(node.metadata.storageKey, ""),
-        "",
-        CANVAS_RESTORE_ITEM_TIMEOUT_MS,
-      );
-      if (resolved) {
-        return {
-          ...node,
-          metadata: { ...node.metadata, content: resolved },
-        };
-      }
-    }
-    if (node.metadata?.backendUrl) {
-      const backendUrl = normalizeCanvasImageUrl(node.metadata.backendUrl);
-      return {
-        ...node,
-        metadata: { ...node.metadata, backendUrl, content: backendUrl },
-      };
-    }
-    if (content.startsWith("data:image/")) return node;
-    if (content) {
-      const normalizedContent = normalizeCanvasBackendImageSource(content);
-      if (normalizedContent) {
-        return {
-          ...node,
-          metadata: { ...node.metadata, content: normalizedContent },
-        };
-      }
-    }
-    return node;
-  } catch {
-    return markCanvasNodeRestoreError(node, "图片恢复失败，请重新上传。");
+    return await recoverCanvasImageNode(node, signal);
+  } catch (error) {
+    if (signal?.aborted) throw signal.reason || error;
+    return markCanvasNodeRestoreError(
+      node,
+      "图片本地缓存和远程源均无法恢复，请重新上传。",
+    );
   }
 }
 
+async function recoverCanvasImageNode(
+  node: CanvasNodeData,
+  signal?: AbortSignal,
+) {
+  const metadata = node.metadata || {};
+  if (metadata.storageKey) {
+    const resolved = await withCanvasRestoreTimeout(
+      resolveImageUrl(metadata.storageKey, ""),
+      "",
+      CANVAS_RESTORE_ITEM_TIMEOUT_MS,
+    );
+    if (resolved) {
+      await setStoredImagesRetained([metadata.storageKey], true).catch(
+        () => undefined,
+      );
+      return {
+        ...node,
+        metadata: {
+          ...metadata,
+          content: resolved,
+          retained: true,
+          status: NODE_STATUS_SUCCESS,
+          errorDetails: undefined,
+        },
+      };
+    }
+  }
+
+  const backendRel = normalizeCanvasBackendRel(
+    String(metadata.backendRel || "").trim().replace(/^\/+/, "") ||
+      extractBackendImageRel(metadata.backendUrl || metadata.content || ""),
+  );
+  for (const source of canvasImageRecoverySources(metadata, backendRel)) {
+    if (signal?.aborted) throw signal.reason;
+    const uploaded = await uploadCanvasRecoverySource(source, signal);
+    if (signal?.aborted) throw signal.reason;
+    if (!uploaded) continue;
+    const sourceBackendUrl = /^(?:https?:\/\/|\/images\/)/i.test(source)
+      ? source
+      : "";
+    return {
+      ...node,
+      metadata: {
+        ...metadata,
+        ...imageMetadata(uploaded, {
+          backendUrl: metadata.backendUrl || sourceBackendUrl,
+          backendRel,
+        }),
+        retained: true,
+      },
+    };
+  }
+
+  return markCanvasNodeRestoreError(
+    node,
+    "图片本地缓存和远程源均无法恢复，请重新上传。",
+  );
+}
+
+async function uploadCanvasRecoverySource(
+  source: string,
+  parentSignal?: AbortSignal,
+): Promise<UploadedImage | null> {
+  const controller = new AbortController();
+  const abortFromParent = () => controller.abort(parentSignal?.reason);
+  if (parentSignal?.aborted) abortFromParent();
+  else parentSignal?.addEventListener("abort", abortFromParent, { once: true });
+  const timeout = window.setTimeout(
+    () =>
+      controller.abort(
+        new DOMException("Canvas image restore timed out", "TimeoutError"),
+      ),
+    CANVAS_RECOVERY_SOURCE_TIMEOUT_MS,
+  );
+  try {
+    return await uploadImage(source, {
+      ...CANVAS_RETAINED_IMAGE_UPLOAD_OPTIONS,
+      signal: controller.signal,
+    });
+  } catch {
+    return null;
+  } finally {
+    window.clearTimeout(timeout);
+    parentSignal?.removeEventListener("abort", abortFromParent);
+  }
+}
+
+function normalizeCanvasBackendRel(value?: string) {
+  const raw = String(value || "").trim();
+  if (!raw || raw.includes("\\")) return "";
+  const segments = raw.replace(/^\/+/, "").split("/");
+  if (!segments.length || segments.some(isUnsafeCanvasPathSegment)) return "";
+  return segments.join("/");
+}
+
+function isUnsafeCanvasPathSegment(segment: string) {
+  if (!segment) return true;
+  let decoded = segment;
+  try {
+    // Decode repeatedly so double-encoded dot segments and separators cannot
+    // become route traversal only after the browser or upstream decodes again.
+    for (let pass = 0; pass <= segment.length; pass += 1) {
+      if (
+        decoded === "." ||
+        decoded === ".." ||
+        decoded.includes("/") ||
+        decoded.includes("\\")
+      )
+        return true;
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) return false;
+      decoded = next;
+    }
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+function canvasImageRecoverySources(
+  metadata: CanvasNodeMetadata,
+  backendRel?: string,
+) {
+  const relativeSource = backendRel
+    ? `/images/${backendRel
+        .split("/")
+        .map((part) => encodeURIComponent(part))
+        .join("/")}`
+    : "";
+  return Array.from(
+    new Set(
+      [relativeSource, metadata.backendUrl, metadata.content]
+        .map((value) => normalizeCanvasBackendImageSource(String(value || "")))
+        .filter((value) => Boolean(value) && !value.startsWith("blob:")),
+    ),
+  );
+}
 function markCanvasNodeRestoreError(
   node: CanvasNodeData,
   errorDetails: string,
@@ -12102,7 +12373,7 @@ function seedance2FaceEditFallbackSource(metadata: CanvasNodeMetadata | undefine
 
   const normalizedContent = normalizeCanvasBackendImageSource(content);
   const normalizedBackendUrl = normalizeCanvasBackendImageSource(metadata?.backendUrl || "");
-  const backendRel = String(metadata?.backendRel || "").trim().replace(/^\/+/, "");
+  const backendRel = normalizeCanvasBackendRel(metadata?.backendRel);
   return normalizedContent || normalizedBackendUrl || (backendRel ? `/images/${backendRel}` : "");
 }
 
@@ -12114,10 +12385,21 @@ function normalizeCanvasBackendImageSource(value: string) {
   const raw = String(value || "").trim();
   if (!raw) return "";
   if (isLocalCanvasImageSource(raw)) return raw;
-  if (/^images\//i.test(raw)) return `/${raw}`;
-  const marker = "/images/";
-  const index = raw.indexOf(marker);
-  if (index >= 0) return raw.slice(index);
+  const relative = /^images\//i.test(raw)
+    ? `/${raw}`
+    : raw.match(/\/images\/.*$/i)?.[0] || "";
+  if (relative) {
+    const path = relative.split(/[?#]/, 1)[0];
+    if (
+      path.includes("\\") ||
+      path
+        .replace(/^\/images\//i, "")
+        .split("/")
+        .some(isUnsafeCanvasPathSegment)
+    )
+      return "";
+    return relative;
+  }
   return normalizeCanvasImageUrl(raw);
 }
 
@@ -12340,13 +12622,17 @@ function normalizeConfigNodeSize(nodes: CanvasNodeData[]) {
   });
 }
 
-async function hydrateAssistantImages(sessions: CanvasAssistantSession[]) {
+async function hydrateAssistantImages(
+  sessions: CanvasAssistantSession[],
+  signal?: AbortSignal,
+) {
   const hydrateItem = async <
     T extends { dataUrl?: string; storageKey?: string },
   >(
     item: T,
   ) => {
     try {
+      if (signal?.aborted) throw signal.reason;
       if (item.storageKey)
         return {
           ...item,

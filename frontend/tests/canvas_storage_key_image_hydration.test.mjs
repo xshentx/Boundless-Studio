@@ -21,7 +21,7 @@ assert.doesNotMatch(
 );
 assert.match(
   hydrateCanvasNodeSource,
-  /resolveImageUrl\(node\.metadata\.storageKey/,
+  /resolveImageUrl\((?:node\.)?metadata(?:\?\.)?\.storageKey/,
   "stored image nodes should hydrate through resolveImageUrl",
 );
 

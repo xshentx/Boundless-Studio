@@ -127,7 +127,7 @@ export function UpdateSettingsPanel() {
                 </div>
 
                 <div className="grid gap-3 rounded-xl bg-stone-50 p-3 text-xs dark:bg-stone-900 sm:grid-cols-2">
-                    <InfoItem label="当前版本" value={`v${state.currentVersion || "1.0.4"}`} />
+                    <InfoItem label="当前版本" value={`v${state.currentVersion || "1.0.5"}`} />
                     <InfoItem label="最新版本" value={state.latestVersion ? `v${state.latestVersion}` : "尚未获取"} />
                     <InfoItem label="更新仓库" value="xshentx/Boundless-Studio" />
                     <InfoItem label="最后检查" value={formatDate(state.checkedAt)} />

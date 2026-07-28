@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"os"
 	"sync"
 	"sync/atomic"
 
@@ -39,6 +40,8 @@ func (a *App) startup(ctx context.Context) {
 	_ = a.relay.StartLoopback(ctx)
 	a.ensureMainWindowIcon()
 	a.startSystemTray()
+	acknowledgeAppliedUpdate(os.Args)
+	cleanupLegacyVersionedExecutablesAtStartup()
 	a.startAutomaticUpdateCheck(ctx)
 }
 

@@ -39,7 +39,7 @@
 2. 将 `BoundlessStudio.app` 拖入“应用程序”目录并启动。
 3. 当前自动构建产物未进行 Apple Developer ID 签名与公证；若 Gatekeeper 阻止首次启动，请在 Finder 中按住 Control 点击应用并选择“打开”。
 
-> Windows 与 macOS 包均由同一 `v1.0.4` 源码标签构建。macOS 包面向 Apple Silicon（ARM64）。Windows 应用内自动更新目前仅处理 Windows 客户端资源；macOS 请从 Releases 手动更新。
+> Windows 与 macOS 包均由同一 `v1.0.5` 源码标签构建。macOS 包面向 Apple Silicon（ARM64）。Windows 应用内自动更新目前仅处理 Windows 客户端资源；macOS 请从 Releases 手动更新。
 
 ## 运行时数据
 
@@ -158,4 +158,4 @@ Boundless-Studio/
 
 ## 版本
 
-当前版本：**v1.0.4**。详见 [RELEASE_NOTES.md](RELEASE_NOTES.md)。
+当前版本：**v1.0.5**。详见 [RELEASE_NOTES.md](RELEASE_NOTES.md)。
