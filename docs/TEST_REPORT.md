@@ -140,7 +140,7 @@ The active 56-test suite now verifies settings-driven story text model options, 
 ## GitHub Releases 自动更新专项验证
 
 - 更新源固定为 `https://api.github.com/repos/xshentx/Boundless-Studio/releases/latest`，仓库页为 `https://github.com/xshentx/Boundless-Studio`。
-- 当前客户端版本统一为 `v1.0.1`；版本比较兼容 `v1.2.0` 和 `1.2.0` 标签格式。
+- 当前客户端版本统一为 `v1.0.2`；版本比较兼容 `v1.2.0` 和 `1.2.0` 标签格式。
 - 软件设置窗口已实机确认显示“中转设置 / 模型路由设置 / 软件更新”三个顶部页签，未修改画布主体视觉样式。
 - “启动时自动检测更新”默认关闭并持久化到 `data/canvas.db`；开启后每次启动后台检查 Latest Release，只检查，不会擅自下载或安装。
 - 更新页已实机确认显示当前版本、最新版本、仓库、最后检查时间、Release 说明与资源，并提供“立即检查”“打开 Releases”“下载并安装”。

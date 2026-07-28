@@ -202,6 +202,30 @@ export function providerModelsForCapability(provider: ApiRelayProvider, capabili
     return normalizeModelList(models);
 }
 
+export function resolveConfiguredModel(model: string, configuredModels: readonly string[]) {
+    const requested = String(model || "").trim();
+    if (!requested) return "";
+
+    const exactMatch = configuredModels.find((configuredModel) => String(configuredModel || "").trim() === requested);
+    if (exactMatch) return String(exactMatch).trim();
+
+    const matchKey = normalizeModelMatchKey(requested);
+    const aliasMatch = configuredModels.find((configuredModel) => normalizeModelMatchKey(configuredModel) === matchKey);
+    return aliasMatch ? String(aliasMatch).trim() : "";
+}
+
+export function modelMatchesAllowedModel(model: string, allowedModels: readonly string[]) {
+    return Boolean(resolveConfiguredModel(model, allowedModels));
+}
+
+function normalizeModelMatchKey(model: string) {
+    return String(model || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[._]+/g, "-")
+        .replace(/-+/g, "-");
+}
+
 export function fillMissingCapabilityRoutes(routing: Partial<ApiRelayRouting>, provider: ApiRelayProvider): ApiRelayRouting {
     return API_CAPABILITIES.reduce((nextRouting, capability) => {
         const current = routing[capability] || defaultApiRelayRouting[capability];

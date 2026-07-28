@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { ModelIcon, ModelLabel } from "@/components/model-icon";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { normalizeModelList } from "@/stores/api-relay-config";
+import { modelMatchesAllowedModel, normalizeModelList, resolveConfiguredModel } from "@/stores/api-relay-config";
 import { selectableModelsByCapability, type AiConfig, type ModelCapability } from "@/stores/use-config-store";
 
 export type ModelSelectControlProps = {
@@ -44,9 +44,21 @@ export function ModelSelectControl({
 }: ModelSelectControlProps) {
     const pickerId = useId();
     const [open, setOpen] = useState(false);
+    const aliasMigrationRef = useRef("");
     const options = useMemo(() => normalizeModelList([...models]), [models]);
     const requested = String(value || "").trim();
-    const current = options.includes(requested) ? requested : "";
+    const current = resolveConfiguredModel(requested, options);
+
+    useEffect(() => {
+        const migrationKey = current && current !== requested ? `${requested}\u0000${current}` : "";
+        if (!migrationKey) {
+            aliasMigrationRef.current = "";
+            return;
+        }
+        if (aliasMigrationRef.current === migrationKey) return;
+        aliasMigrationRef.current = migrationKey;
+        onChange(current);
+    }, [current, onChange, requested]);
 
     useEffect(() => {
         const closeOtherPicker = (event: Event) => {
@@ -127,8 +139,7 @@ export function ModelPicker({ config, value, onChange, capability, className, fu
     const options = useMemo(() => {
         const configuredModels = selectableModelsByCapability(config, capability);
         if (!allowedModels?.length) return configuredModels;
-        const allowed = new Set(allowedModels.map((model) => String(model || "").trim()).filter(Boolean));
-        return configuredModels.filter((model) => allowed.has(model));
+        return configuredModels.filter((model) => modelMatchesAllowedModel(model, allowedModels));
     }, [allowedModels, capability, config]);
 
     return (

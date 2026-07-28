@@ -8,7 +8,7 @@ import { motion } from "motion/react";
 import { ImageGenerationPending } from "@/components/image-generation-pending";
 import { ModelPicker } from "@/components/model-picker";
 import { useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
-import { resolveBoardCapabilityRoute } from "@/stores/api-relay-config";
+import { modelMatchesAllowedModel, resolveBoardCapabilityRoute, resolveConfiguredModel } from "@/stores/api-relay-config";
 import { CreditSymbol, imageCreditCost, outputSizeForImageQuality, requestCreditCost } from "@/constant/credits";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { nanoid } from "nanoid";
@@ -97,8 +97,8 @@ export function CanvasAssistantPanel({ nodes, selectedNodeIds, sessions, activeS
     const assistantConfig = useMemo(
         () => ({
             ...effectiveConfig,
-            textModel: pickAssistantModel(storedConfig.textModel || effectiveConfig.textModel || effectiveConfig.model, CANVAS_ASSISTANT_TEXT_MODELS),
-            imageModel: pickAssistantModel(storedConfig.imageModel || effectiveConfig.imageModel || effectiveConfig.model, CANVAS_ASSISTANT_IMAGE_MODELS),
+            textModel: pickAssistantModel([storedConfig.textModel, effectiveConfig.textModel, effectiveConfig.model], effectiveConfig.textModels, CANVAS_ASSISTANT_TEXT_MODELS),
+            imageModel: pickAssistantModel([storedConfig.imageModel, effectiveConfig.imageModel, effectiveConfig.model], effectiveConfig.imageModels, CANVAS_ASSISTANT_IMAGE_MODELS),
             count: effectiveConfig.canvasImageCount || effectiveConfig.count,
         }),
         [effectiveConfig, storedConfig.imageModel, storedConfig.textModel],
@@ -528,9 +528,12 @@ function SettingTitle({ children, color }: { children: string; color: string }) 
     );
 }
 
-function pickAssistantModel(value: string, allowedModels: readonly string[]) {
-    const model = String(value || "").trim();
-    return allowedModels.includes(model) ? model : "";
+function pickAssistantModel(candidates: readonly string[], configuredModels: readonly string[], allowedModels: readonly string[]) {
+    for (const candidate of candidates) {
+        const configuredModel = resolveConfiguredModel(candidate, configuredModels);
+        if (configuredModel && modelMatchesAllowedModel(configuredModel, allowedModels)) return configuredModel;
+    }
+    return "";
 }
 
 function qualityLabel(value: string) {

@@ -370,7 +370,7 @@ function BoardRouteRow({
                 placeholder={!isCustom ? "继承全局模型" : provider ? `选择${capabilityLabel}模型` : `请先选择${capabilityLabel}中转`}
                 emptyLabel={`暂无已配置${capabilityLabel}模型`}
                 triggerClassName={inputClass}
-                contentClassName="w-[min(360px,calc(100vw-24px))]"
+                contentClassName="z-[1400] w-[min(360px,calc(100vw-24px))]"
                 onChange={(model) => onRouteChange(definition.key, { model })}
             />
         </div>
@@ -402,7 +402,7 @@ function RouteRow({ capability, config, onRouteChange }: { capability: ApiCapabi
                 placeholder={provider ? `选择${API_CAPABILITY_LABELS[capability]}模型` : "请先选择中转 API"}
                 emptyLabel={`暂无已配置${API_CAPABILITY_LABELS[capability]}模型`}
                 triggerClassName={inputClass}
-                contentClassName="w-[min(360px,calc(100vw-24px))]"
+                contentClassName="z-[1400] w-[min(360px,calc(100vw-24px))]"
                 onChange={(model) => onRouteChange(capability, { model })}
             />
         </div>

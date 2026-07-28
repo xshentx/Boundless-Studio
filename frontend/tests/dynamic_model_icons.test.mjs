@@ -35,7 +35,7 @@ for (const modelToken of ["gpt", "claude", "gemini", "grok", "deepseek", "qwen",
 assert.match(iconSource, /failedIcon[\s\S]*<Cpu/u, "unknown or failed model icons must use a safe generic fallback");
 assert.match(pickerSource, /current \? <ModelIcon model=\{current\}/u, "the selected value must render a real model icon");
 assert.match(pickerSource, /<ModelLabel model=\{model\}/u, "dropdown options must render real model icons");
-assert.match(pickerSource, /const current = options\.includes\(requested\) \? requested : ""/u, "removed or unconfigured values must show the placeholder");
+assert.match(pickerSource, /const current = resolveConfiguredModel\(requested, options\)/u, "saved aliases must resolve to configured IDs while removed values still show the placeholder");
 assert.match(pickerSource, /placeholder = "\u9009\u62e9\u6a21\u578b"/u, "an empty selector must display the choose-model placeholder");
 
 assert.match(configSource, /enabledRelayModelsForCapability\(config\.apiRelays, "text"\)[\s\S]*enabledRelayModelsForCapability\(config\.apiRelays, "image"\)[\s\S]*enabledRelayModelsForCapability\(config\.apiRelays, "video"\)[\s\S]*enabledRelayModelsForCapability\(config\.apiRelays, "audio"\)/u, "all selectable capability lists must come from enabled relay configuration");

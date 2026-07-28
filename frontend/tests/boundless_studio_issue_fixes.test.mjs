@@ -32,6 +32,8 @@ const settings = read("src/components/image-settings-panel.tsx");
 const config = read("src/stores/use-config-store.ts");
 const imageApi = read("src/services/api/image.ts");
 const assistant = read("src/app/canvas/components/canvas-assistant-panel.tsx");
+const modelPicker = read("src/components/model-picker.tsx");
+const apiSettings = read("src/components/api-access-settings-dialog.tsx");
 const home = read("src/app/canvas/home/page.tsx");
 const assistantRequestConfigPath = join(frontendRoot, "src/app/canvas/utils/canvas-assistant-request-config.ts");
 const relayConfigPath = join(frontendRoot, "src/stores/api-relay-config.ts");
@@ -78,8 +80,21 @@ assert.match(assistant, /onChange=\{\(model\) => onConfigChange\("textModel", mo
 assert.match(assistant, /buildCanvasAssistantRequestConfig\(assistantConfig, nextMode\)/, "assistant requests must be rebuilt from the picker-backed config");
 assert.match(assistant, /boardRouteKey: request\.boardRouteKey/, "assistant text calls must use the temporary selected-model board route");
 assert.match(assistant, /requestGeneration\(requestConfig, text, request\.boardRouteKey\)/, "assistant image calls must use the temporary selected-model board route");
+assert.match(assistant, /resolveConfiguredModel\(candidate, configuredModels\)/, "assistant must resolve persisted aliases to the provider's configured model ID");
+assert.match(assistant, /effectiveConfig\.textModels, CANVAS_ASSISTANT_TEXT_MODELS/, "assistant text selection must resolve against configured text model IDs");
+assert.match(assistant, /effectiveConfig\.imageModels, CANVAS_ASSISTANT_IMAGE_MODELS/, "assistant image selection must resolve against configured image model IDs");
+assert.match(modelPicker, /configuredModels\.filter\(\(model\) => modelMatchesAllowedModel\(model, allowedModels\)\)/, "scoped model pickers must match configured model aliases instead of dropping them");
+assert.match(modelPicker, /aliasMigrationRef\.current = migrationKey;\s*onChange\(current\);/, "resolved aliases must be written back to the parent configuration");
+const routePickerOverlays = apiSettings.match(/contentClassName="z-\[1400\]/g) || [];
+assert.equal(routePickerOverlays.length, 2, "global and board route model menus must render above the z-1300 settings dialog");
 
 const relayConfig = loadTsModule(relayConfigPath);
+assert.equal(relayConfig.resolveConfiguredModel("gpt-5.5", ["gpt-5-5"]), "gpt-5-5", "persisted dotted aliases must resolve to the provider's real model ID");
+assert.equal(relayConfig.resolveConfiguredModel("gpt-5-5", ["gpt-5.5", "gpt-5-5"]), "gpt-5-5", "an exact configured model ID must win over an earlier alias");
+assert.equal(relayConfig.resolveConfiguredModel("removed-model", ["gpt-5-5"]), "", "removed models must still resolve to an empty selection");
+assert.equal(relayConfig.modelMatchesAllowedModel("gpt-5-5", ["gpt-5.5"]), true, "hyphenated GPT model IDs from relays must match the approved dotted alias");
+assert.equal(relayConfig.modelMatchesAllowedModel("gemini-3-1-pro", ["gemini-3.1-pro"]), true, "Gemini relay aliases must remain selectable");
+assert.equal(relayConfig.modelMatchesAllowedModel("gpt-5.2", ["gpt-5.5"]), false, "alias matching must not admit a different model version");
 const { buildCanvasAssistantRequestConfig } = loadTsModule(assistantRequestConfigPath, {
   "@/stores/api-relay-config": relayConfig,
 });
