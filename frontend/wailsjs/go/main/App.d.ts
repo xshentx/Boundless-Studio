@@ -4,6 +4,8 @@ import {main} from '../models';
 
 export function CheckForUpdates():Promise<main.UpdateState>;
 
+export function FetchRelayModels(arg1:string,arg2:string):Promise<main.RelayModelsResponse>;
+
 export function GetClientConfig():Promise<main.ClientConfig>;
 
 export function GetUpdateState():Promise<main.UpdateState>;

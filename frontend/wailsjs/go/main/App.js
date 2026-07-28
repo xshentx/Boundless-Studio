@@ -6,6 +6,10 @@ export function CheckForUpdates() {
   return window['go']['main']['App']['CheckForUpdates']();
 }
 
+export function FetchRelayModels(arg1, arg2) {
+  return window['go']['main']['App']['FetchRelayModels'](arg1, arg2);
+}
+
 export function GetClientConfig() {
   return window['go']['main']['App']['GetClientConfig']();
 }

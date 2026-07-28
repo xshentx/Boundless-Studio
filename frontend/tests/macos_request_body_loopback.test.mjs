@@ -20,6 +20,7 @@ assert.equal(desktopApiUrl("client-api/media?key=image", "wails:"), `${DESKTOP_L
 assert.equal(desktopApiUrl("/local-relay-proxy/images/edits/", "http:"), "/local-relay-proxy/images/edits/");
 
 const relayProxySource = readFileSync(join(frontendRoot, "src/services/api/relay-proxy.ts"), "utf8");
+const imageApiSource = readFileSync(join(frontendRoot, "src/services/api/image.ts"), "utf8");
 const desktopStorageSource = readFileSync(join(frontendRoot, "src/services/desktop-storage.ts"), "utf8");
 const webdavSource = readFileSync(join(frontendRoot, "src/services/webdav-sync.ts"), "utf8");
 const sharedRequestSource = readFileSync(join(frontendRoot, "src/lib/request.ts"), "utf8");
@@ -29,6 +30,7 @@ const appSource = readFileSync(join(frontendRoot, "../app.go"), "utf8");
 const relayGoSource = readFileSync(join(frontendRoot, "../relay.go"), "utf8");
 const macInfoPlist = readFileSync(join(frontendRoot, "../build/darwin/Info.plist"), "utf8");
 assert.match(relayProxySource, /desktopApiUrl\(`\$\{LOCAL_RELAY_PROXY_PREFIX\}/, "AI JSON and multipart requests must use the macOS loopback transport");
+assert.match(imageApiSource, /shouldUseDesktopLoopback[\s\S]*fetchNativeRelayModels\(baseUrl, apiKey\)/, "macOS model-list reads must bypass WKWebView and use the native Go bridge");
 assert.match(desktopStorageSource, /desktopApiUrl\(`\/client-api\/media/, "media blob uploads must bypass the macOS Wails body stream");
 assert.match(desktopStorageSource, /desktopApiUrl\(`\/client-api\/state/, "state JSON writes must bypass the macOS Wails body stream");
 assert.match(webdavSource, /fetch\(desktopApiUrl\("\/webdav-proxy"\)/, "WebDAV request bodies must use the same macOS-safe transport");

@@ -110,6 +110,19 @@ func (a *App) GetClientConfig() ClientConfig {
 	return a.relay.config
 }
 
+// FetchRelayModels performs the model-list request in Go instead of WKWebView.
+// Packaged macOS pages use the wails: scheme, and WebKit can reject a request
+// from that custom scheme to the HTTP loopback proxy before it reaches Go.
+// Keeping the request native also avoids applying browser CORS rules to an API
+// call that is already restricted to the desktop application.
+func (a *App) FetchRelayModels(baseURL, apiKey string) RelayModelsResponse {
+	ctx := a.runtimeContext()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return a.relay.FetchModels(ctx, baseURL, apiKey)
+}
+
 func (a *App) SetUpstreamURL(value string) error {
 	normalized, err := normalizeHTTPBaseURL(value)
 	if err != nil {

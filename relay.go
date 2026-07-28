@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -23,6 +24,12 @@ const desktopClientConfigStateKey = "desktop:client_config"
 type ClientConfig struct {
 	UpstreamURL      string `json:"upstreamUrl"`
 	AutoCheckUpdates bool   `json:"autoCheckUpdates"`
+}
+
+type RelayModelsResponse struct {
+	Models  []string `json:"models"`
+	Status  int      `json:"status"`
+	Message string   `json:"message"`
 }
 
 type RelayServer struct {
@@ -403,6 +410,94 @@ func buildLocalRelayTarget(baseURL, relayPath, rawQuery string) (*url.URL, error
 	parsed.Path = strings.TrimRight(cleanPath, "/") + "/" + strings.Trim(relayPath, "/")
 	parsed.RawQuery = rawQuery
 	return parsed, nil
+}
+
+// FetchModels reads an OpenAI-compatible model list with the native HTTP
+// client. It is exposed through the Wails bridge for macOS, where WKWebView's
+// custom-scheme/private-network checks can block the browser request to the
+// local relay even though the same provider works on Windows.
+func (s *RelayServer) FetchModels(ctx context.Context, baseURL, apiKey string) RelayModelsResponse {
+	target, err := buildLocalRelayTarget(baseURL, "models", "")
+	if err != nil {
+		return RelayModelsResponse{Message: err.Error()}
+	}
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
+	if err != nil {
+		return RelayModelsResponse{Message: err.Error()}
+	}
+	if key := strings.TrimSpace(apiKey); key != "" {
+		request.Header.Set("Authorization", "Bearer "+key)
+	}
+	request.Header.Set("Accept", "application/json")
+
+	response, err := s.client.Do(request)
+	if err != nil {
+		return RelayModelsResponse{Message: err.Error()}
+	}
+	defer response.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(response.Body, 4<<20))
+	if err != nil {
+		return RelayModelsResponse{Status: response.StatusCode, Message: err.Error()}
+	}
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return RelayModelsResponse{
+			Status:  response.StatusCode,
+			Message: relayResponseMessage(body, response.Status),
+		}
+	}
+
+	var payload struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return RelayModelsResponse{Status: response.StatusCode, Message: string(body)}
+	}
+	if message := strings.TrimSpace(payload.Error.Message); message != "" {
+		return RelayModelsResponse{Status: response.StatusCode, Message: message}
+	}
+
+	models := make([]string, 0, len(payload.Data))
+	seen := make(map[string]struct{}, len(payload.Data))
+	for _, model := range payload.Data {
+		id := strings.TrimSpace(model.ID)
+		if id == "" {
+			continue
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		models = append(models, id)
+	}
+	return RelayModelsResponse{Models: models, Status: response.StatusCode}
+}
+
+func relayResponseMessage(body []byte, fallback string) string {
+	var payload struct {
+		Message string `json:"message"`
+		Msg     string `json:"msg"`
+		Error   struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(body, &payload) == nil {
+		for _, value := range []string{payload.Error.Message, payload.Message, payload.Msg} {
+			if message := strings.TrimSpace(value); message != "" {
+				return message
+			}
+		}
+	}
+	if message := strings.TrimSpace(string(body)); message != "" {
+		return message
+	}
+	return fallback
 }
 
 func (s *RelayServer) handleWebDAVProxy(w http.ResponseWriter, r *http.Request) {

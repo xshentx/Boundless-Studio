@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 )
 
@@ -25,6 +26,48 @@ func TestBuildLocalRelayTargetPreservesKnownAPIBase(t *testing.T) {
 	}
 	if got, want := target.String(), "https://api.example.com/api/plan/v3/videos"; got != want {
 		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+func TestFetchModelsUsesNativeHTTPClient(t *testing.T) {
+	var gotAuthorization string
+	var gotPath string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuthorization = r.Header.Get("Authorization")
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"id":"video-z"},{"id":"video-a"},{"id":"video-z"}]}`))
+	}))
+	defer upstream.Close()
+
+	server := newTestRelayServer(t)
+	result := server.FetchModels(t.Context(), upstream.URL+"/v1", "test-key")
+	if result.Message != "" || result.Status != http.StatusOK {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+	if gotPath != "/v1/models" {
+		t.Fatalf("upstream path=%q want=/v1/models", gotPath)
+	}
+	if gotAuthorization != "Bearer test-key" {
+		t.Fatalf("authorization=%q", gotAuthorization)
+	}
+	if got, want := result.Models, []string{"video-z", "video-a"}; !slices.Equal(got, want) {
+		t.Fatalf("models=%v want=%v", got, want)
+	}
+}
+
+func TestFetchModelsPreservesUpstreamStatusAndMessage(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":{"message":"invalid token"}}`))
+	}))
+	defer upstream.Close()
+
+	server := newTestRelayServer(t)
+	result := server.FetchModels(t.Context(), upstream.URL, "bad-key")
+	if result.Status != http.StatusUnauthorized || result.Message != "invalid token" {
+		t.Fatalf("unexpected result: %+v", result)
 	}
 }
 

@@ -21,6 +21,7 @@ type UploadImageOptions = { retained?: boolean; signal?: AbortSignal };
 
 const legacyStore = localforage.createInstance({ name: "infinite-canvas", storeName: "image_files" });
 const objectUrls = new Map<string, string>();
+const pendingObjectUrls = new Map<string, Promise<string | null>>();
 export const CANVAS_IMAGE_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 export async function uploadImage(input: string | Blob, options: UploadImageOptions = {}): Promise<UploadedImage> {
@@ -56,9 +57,22 @@ export async function resolveImageUrl(storageKey?: string, fallback = "") {
         void touchStoredImages([storageKey]);
         return cached;
     }
-    const blob = await getImageBlob(storageKey, { touch: true });
-    if (!blob) return fallback;
-    return replaceObjectURL(storageKey, blob);
+
+    // Canvas state, history and assistant messages can restore the same image
+    // concurrently. Coalesce those reads so a later completion cannot replace
+    // (and revoke) the blob URL that an earlier <img> has just started loading.
+    let pending = pendingObjectUrls.get(storageKey);
+    if (!pending) {
+        const load = getImageBlob(storageKey, { touch: true }).then((blob) => {
+            if (!blob) return null;
+            return objectUrls.get(storageKey) || replaceObjectURL(storageKey, blob);
+        });
+        pending = load.finally(() => {
+            if (pendingObjectUrls.get(storageKey) === pending) pendingObjectUrls.delete(storageKey);
+        });
+        pendingObjectUrls.set(storageKey, pending);
+    }
+    return (await pending) || fallback;
 }
 
 export async function getImageBlob(storageKey: string, options: { touch?: boolean } = {}) {
@@ -161,19 +175,26 @@ export async function setStoredImagesRetained(keys: Iterable<string>, retained =
     );
 }
 
-export async function cleanupExpiredStoredImages(maxAgeMs = CANVAS_IMAGE_RETENTION_MS) {
+export async function cleanupExpiredStoredImages(maxAgeMs = CANVAS_IMAGE_RETENTION_MS, protectedKeys: Iterable<string> = []) {
     const now = Date.now();
+    const protectedSet = new Set(protectedKeys);
     const expired = new Set<string>();
     try {
         (await listDesktopMedia("images"))
-            .filter((record) => record.storageKey.startsWith("image:") && !record.retained && now - (record.lastAccessedAt || record.createdAt) > maxAgeMs)
+            .filter(
+                (record) =>
+                    record.storageKey.startsWith("image:") &&
+                    !protectedSet.has(record.storageKey) &&
+                    !record.retained &&
+                    now - (record.lastAccessedAt || record.createdAt) > maxAgeMs,
+            )
             .forEach((record) => expired.add(record.storageKey));
     } catch {
         // Standalone development can still clean the legacy IndexedDB store.
     }
     await legacyStore.iterate((value: StoredImage, key) => {
         const record = unwrapStoredImage(value);
-        if (!record || record.retained) return;
+        if (!record || protectedSet.has(key) || record.retained) return;
         if (now - (record.lastAccessedAt || record.createdAt) > maxAgeMs) expired.add(key);
     });
     await deleteStoredImages(expired);

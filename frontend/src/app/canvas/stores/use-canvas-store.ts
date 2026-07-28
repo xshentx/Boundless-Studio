@@ -5,7 +5,7 @@ import { nanoid } from "nanoid";
 import { localForageStorage } from "@/lib/localforage-storage";
 import type { CanvasBackgroundMode } from "@/lib/canvas-theme";
 import { getCachedAuthStorageScope, normalizeStorageScope, scopedStorageKey } from "@/lib/user-storage-scope";
-import { cleanupExpiredStoredImages } from "@/services/image-storage";
+import { collectImageStorageKeys, setStoredImagesRetained } from "@/services/image-storage";
 import type { CanvasAssistantSession, CanvasConnection, CanvasNodeData, ViewportTransform } from "../types";
 import { getCanvasMergeScopes, mergeCanvasProjectsByScope, type CanvasMergeProject } from "./canvas-project-merge";
 
@@ -91,7 +91,11 @@ const canvasStorage: PersistStorage<CanvasStore> = {
         if (scopedValues.some((entry) => entry.value !== mergedValue)) {
             void Promise.allSettled(getCanvasStorageKeys(name).map(({ storageKey }) => localForageStorage.setItem(storageKey, mergedValue)));
         }
-        void cleanupExpiredStoredImages();
+        const referencedImageKeys = collectImageStorageKeys(parsed.state.projects);
+        // Older project records can predate the retained flag. Mark their
+        // images before hydration completes; the providers run the single
+        // age-based cleanup only after both canvas and asset stores are ready.
+        await setStoredImagesRetained(referencedImageKeys, true).catch(() => undefined);
         queuedPersistState = parsed.state as PersistedCanvasState;
         return parsed;
     },

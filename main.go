@@ -12,7 +12,7 @@ import (
 
 const (
 	applicationTitle       = "无界创作台"
-	applicationVersion     = "1.0.7"
+	applicationVersion     = "1.0.8"
 	singleInstanceUniqueID = "c5802bd3-a8ec-4e4d-b53e-e3fab276ab83"
 	windowsAppUserModelID  = "BoundlessStudio.Desktop"
 	windowsWindowClassName = "BoundlessStudioMainWindow"

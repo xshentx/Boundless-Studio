@@ -8,7 +8,6 @@ import { Download, FileUp, LayoutGrid, List, Plus, Settings2, Wrench } from "luc
 
 import { readZip } from "@/lib/zip";
 import { getDesktopSetting, setDesktopSetting } from "@/services/desktop-storage";
-import { cleanupExpiredStoredImages } from "@/services/image-storage";
 import { openApiSettings } from "@/services/settings-dialog";
 import { setMediaBlob } from "@/services/file-storage";
 import { setImageBlob } from "@/services/image-storage";
@@ -34,11 +33,6 @@ export default function CanvasPage() {
     const importProject = useCanvasStore((state) => state.importProject);
     const selectedIds = useCanvasUiStore((state) => state.selectedProjectIds);
     const setDeleteIds = useCanvasUiStore((state) => state.setDeleteProjectIds);
-
-    useEffect(() => {
-        const timer = window.setTimeout(() => void cleanupExpiredStoredImages(), 1_000);
-        return () => window.clearTimeout(timer);
-    }, []);
 
     useEffect(() => {
         let active = true;

@@ -15,6 +15,7 @@ import { CanvasAudioSettingsPopover, type CanvasAudioSettingKey } from "./canvas
 import { resolvePromptTextareaHeight } from "./canvas-prompt-panel-height";
 import { CanvasResourceMentionTextarea } from "./canvas-resource-mention-textarea";
 import { CanvasVideoSettingsPopover } from "./canvas-video-settings-popover";
+import { canScrollCanvasWheelTarget } from "./canvas-wheel-scroll";
 import { CanvasNodeType, type CanvasGenerationMode, type CanvasNodeData } from "../types";
 import type { CanvasResourceReference } from "../utils/canvas-resource-references";
 
@@ -158,9 +159,10 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
                 onChange={updatePrompt}
                 onSubmit={submit}
                 containerStyle={{ height: promptTextareaHeight, minHeight: PROMPT_TEXTAREA_COLLAPSED_HEIGHT, transition: "none" }}
-                className="thin-scrollbar block h-full w-full resize-y overflow-y-auto whitespace-pre-wrap break-words rounded-xl border px-3 py-2 text-sm leading-5 outline-none"
+                className="thin-scrollbar block h-full w-full resize-y overflow-y-auto overscroll-contain whitespace-pre-wrap break-words rounded-xl border px-3 py-2 text-sm leading-5 outline-none"
                 style={{ background: theme.node.fill, borderColor: theme.node.stroke, color: theme.node.text, minHeight: PROMPT_TEXTAREA_COLLAPSED_HEIGHT, transition: "none" }}
                 highlightLabels={false}
+                data-canvas-wheel-scroll="true"
                 placeholder={promptPlaceholder(mode, hasImageContent, hasTextContent)}
                 onDoubleClick={(event) => {
                     event.stopPropagation();
@@ -168,7 +170,7 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
                     setIsPromptExpanded((expanded) => !expanded);
                 }}
                 onWheel={(event) => {
-                    if (canScrollPromptTextarea(event.currentTarget, event.deltaY)) event.stopPropagation();
+                    if (canScrollCanvasWheelTarget(event.currentTarget, event.deltaY)) event.stopPropagation();
                 }}
             />
 
@@ -271,13 +273,6 @@ function buildNodeConfig(globalConfig: AiConfig, node: CanvasNodeData, mode: Can
         audioInstructions: node.metadata?.audioInstructions || globalConfig.audioInstructions || defaultConfig.audioInstructions,
         count: String(node.metadata?.count || (mode === "image" ? globalConfig.canvasImageCount || globalConfig.count : globalConfig.count) || defaultConfig.count),
     };
-}
-
-export function canScrollPromptTextarea(textarea: Pick<HTMLTextAreaElement, "scrollHeight" | "clientHeight" | "scrollTop">, deltaY: number) {
-    const maximumScrollTop = textarea.scrollHeight - textarea.clientHeight;
-    if (maximumScrollTop <= 1 || deltaY === 0) return false;
-    if (deltaY < 0) return textarea.scrollTop > 0;
-    return textarea.scrollTop < maximumScrollTop - 1;
 }
 
 function promptPlaceholder(mode: CanvasNodeGenerationMode, hasImageContent: boolean, hasTextContent: boolean) {

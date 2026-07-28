@@ -6,7 +6,7 @@ import { persist, type PersistStorage, type StorageValue } from "zustand/middlew
 import { nanoid } from "nanoid";
 import { localForageStorage } from "@/lib/localforage-storage";
 import { getCachedAuthStorageScope, normalizeStorageScope, scopedStorageKey } from "@/lib/user-storage-scope";
-import { cleanupExpiredStoredImages, cleanupUnusedImages, getImageBlob, resolveImageUrl, setStoredImagesRetained, uploadImage } from "@/services/image-storage";
+import { cleanupUnusedImages, getImageBlob, resolveImageUrl, setStoredImagesRetained, uploadImage } from "@/services/image-storage";
 import { cleanupUnusedMedia, resolveMediaUrl } from "@/services/file-storage";
 
 export type AssetKind = "text" | "image" | "video";
@@ -55,16 +55,16 @@ const assetStorage: PersistStorage<AssetStore> = {
         parsed.state.assets = assets;
         const assetImageKeys = assets.flatMap((asset) => (asset.kind === "image" && asset.data.storageKey ? [asset.data.storageKey] : []));
         await setStoredImagesRetained(assetImageKeys, true);
-        const expiredKeys = new Set(await cleanupExpiredStoredImages());
+        const missingKeys = new Set<string>();
         await Promise.all(
             assets.map(async (asset) => {
                 if (asset.kind === "image" && asset.data.storageKey && !(await getImageBlob(asset.data.storageKey))) {
-                    expiredKeys.add(asset.data.storageKey);
+                    missingKeys.add(asset.data.storageKey);
                 }
             }),
         );
         parsed.state.assets = await Promise.all(
-            assets.filter((asset) => asset.kind !== "image" || !asset.data.storageKey || !expiredKeys.has(asset.data.storageKey)).map(async (asset) => {
+            assets.filter((asset) => asset.kind !== "image" || !asset.data.storageKey || !missingKeys.has(asset.data.storageKey)).map(async (asset) => {
                 if (asset.kind === "video" && asset.data.storageKey) return { ...asset, data: { ...asset.data, url: await resolveMediaUrl(asset.data.storageKey, asset.data.url) } };
                 if (asset.kind !== "image") return asset;
                 if (asset.data.storageKey)

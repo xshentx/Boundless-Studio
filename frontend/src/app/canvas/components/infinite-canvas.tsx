@@ -5,6 +5,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { canvasThemes, type CanvasBackgroundMode } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
 import type { ViewportTransform } from "../types";
+import { canScrollCanvasWheelTarget } from "./canvas-wheel-scroll";
 
 type InfiniteCanvasProps = {
     containerRef: React.RefObject<HTMLDivElement | null>;
@@ -199,7 +200,15 @@ export function InfiniteCanvas({ containerRef, viewport, backgroundMode = "lines
         const container = containerRef.current;
         if (!container) return;
 
-        const preventWheelScroll = (event: WheelEvent) => event.preventDefault();
+        const preventWheelScroll = (event: WheelEvent) => {
+            const target = event.target instanceof Element ? event.target : null;
+            const scrollTarget = target?.closest<HTMLElement>("[data-canvas-wheel-scroll]");
+            // This native listener runs before React's delegated onWheel
+            // handlers. Do not cancel the browser default while an embedded
+            // prompt editor can still consume the wheel movement.
+            if (scrollTarget && canScrollCanvasWheelTarget(scrollTarget, event.deltaY)) return;
+            event.preventDefault();
+        };
         container.addEventListener("wheel", preventWheelScroll, { passive: false });
         return () => container.removeEventListener("wheel", preventWheelScroll);
     }, [containerRef]);

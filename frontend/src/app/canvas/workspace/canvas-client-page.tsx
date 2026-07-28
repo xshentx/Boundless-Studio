@@ -105,7 +105,6 @@ import {
   type ApiBoardRouteKey,
 } from "@/stores/api-relay-config";
 import {
-  cleanupExpiredStoredImages,
   imageToDataUrl,
   resolveImageUrl,
   setStoredImagesRetained,
@@ -1932,14 +1931,6 @@ function InfiniteCanvasPage() {
     },
     [cleanupAssetImages],
   );
-
-  useEffect(() => {
-    const timer = window.setTimeout(
-      () => void cleanupExpiredStoredImages(),
-      1_000,
-    );
-    return () => window.clearTimeout(timer);
-  }, []);
 
   useEffect(() => {
     setProjectLoaded(false);

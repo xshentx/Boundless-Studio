@@ -3,6 +3,7 @@ import axios from "axios";
 import { resolveApiRequestRoute, routedLocalApiUrl, routedLocalHeaders, type ApiRequestRoute } from "@/services/api/ai-routing";
 import { buildLocalRelayProxyHeaders, buildLocalRelayProxyUrl } from "@/services/api/relay-proxy";
 import { formatRelayModelsError } from "@/services/api/relay-errors";
+import { shouldUseDesktopLoopback } from "@/services/desktop-api-url";
 import { detectTextApiResponseError } from "@/services/api/text-response-errors";
 import type { ApiBoardRouteKey } from "@/stores/api-relay-config";
 import { type AiConfig } from "@/stores/use-config-store";
@@ -13,6 +14,7 @@ import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
 import { imageToDataUrl } from "@/services/image-storage";
 import { getStoredAuthKey } from "@/store/auth";
 import type { ReferenceImage } from "@/types/image";
+import { FetchRelayModels as fetchNativeRelayModels } from "../../../wailsjs/go/main/App";
 
 export type ChatCompletionMessage = {
     role: "system" | "user" | "assistant";
@@ -561,6 +563,16 @@ export async function fetchImageModels(config: AiConfig) {
 
 export async function fetchRelayModels(baseUrl: string, apiKey: string) {
     try {
+        if (shouldUseDesktopLoopback(typeof window === "undefined" ? "" : window.location.protocol)) {
+            const response = await fetchNativeRelayModels(baseUrl, apiKey);
+            if (response.message) {
+                throw {
+                    message: response.message,
+                    ...(response.status ? { response: { status: response.status, data: { error: { message: response.message } } } } : {}),
+                };
+            }
+            return [...new Set(response.models || [])].filter(Boolean).sort((a, b) => a.localeCompare(b));
+        }
         const response = await axios.get<{ data?: Array<{ id?: string }>; error?: { message?: string } }>(buildLocalRelayProxyUrl("/models"), {
             headers: buildLocalRelayProxyHeaders({ baseUrl, apiKey }),
         });

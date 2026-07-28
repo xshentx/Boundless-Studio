@@ -10,6 +10,7 @@ import { ApiAccessSettingsDialog } from "@/components/api-access-settings-dialog
 import { UpdateNotificationBridge } from "@/components/update-notification-bridge";
 import { getAntThemeConfig } from "@/lib/app-theme";
 import { syncAppDataToWebdav } from "@/services/app-sync";
+import { cleanupExpiredStoredImages, collectImageStorageKeys, setStoredImagesRetained } from "@/services/image-storage";
 import { useAssetStore } from "@/stores/use-asset-store";
 import { useConfigStore } from "@/stores/use-config-store";
 import { useThemeStore } from "@/stores/use-theme-store";
@@ -40,11 +41,30 @@ export function CanvasProviders({ children }: { children: ReactNode }) {
   const syncTimerRef = useRef<number | null>(null);
   const syncInFlightRef = useRef(false);
   const lastSyncedFingerprintRef = useRef("");
+  const imageCleanupReadyRef = useRef(false);
   const syncFingerprint = useMemo(() => buildSyncFingerprint(projects, assets), [projects, assets]);
 
   useEffect(() => {
     void loadPublicSettings();
   }, [loadPublicSettings]);
+
+  useEffect(() => {
+    if (!canvasHydrated || !assetHydrated) {
+      imageCleanupReadyRef.current = false;
+      return;
+    }
+    if (imageCleanupReadyRef.current) return;
+    imageCleanupReadyRef.current = true;
+
+    const protectedImageKeys = collectImageStorageKeys({ projects, assets });
+    void (async () => {
+      // Retain the complete cross-store reference set before deleting any old
+      // unretained image. This prevents either persistence store from cleaning
+      // media while the other store is still restoring its references.
+      await setStoredImagesRetained(protectedImageKeys, true);
+      await cleanupExpiredStoredImages(undefined, protectedImageKeys);
+    })().catch((error) => console.warn("Canvas image cleanup failed", error));
+  }, [assetHydrated, assets, canvasHydrated, projects]);
 
   useEffect(() => {
     if (!canvasHydrated || !assetHydrated || !webdav.url.trim()) return;
