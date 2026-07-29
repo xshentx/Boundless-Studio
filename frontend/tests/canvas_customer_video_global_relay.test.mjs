@@ -93,6 +93,17 @@ assert.doesNotMatch(
 );
 
 assert.match(
+  pollSource,
+  /nativePath:\s*customerVideoNativePollPath\(taskId, apiConfig\)/,
+  "native video polling must use the route-aware endpoint helper",
+);
+assert.match(
+  source,
+  /function customerVideoNativePollPath[\s\S]*route\?\.mode === "local"[\s\S]*videos\/generations\/tasks\/[\s\S]*api\/tasks\//,
+  "native video polling must preserve both global relay and legacy direct API paths",
+);
+
+assert.match(
   seedanceSubmitSource,
   /const videoApiConfig = buildCustomerVideoApiConfig\(latest, config, effectiveConfig\);[\s\S]*const payload = buildSeedance2CustomerVideoPayload\(latest, references, videoApiConfig\.model\);/,
   "Seedance2 workflow should build payload with the model selected by the global videoGeneration route",

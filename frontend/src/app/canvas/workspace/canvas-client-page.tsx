@@ -84,6 +84,10 @@ import {
   type ApiRequestRoute,
 } from "@/services/api/ai-routing";
 import {
+  requestNativeRelayVideo,
+  shouldUseNativeRelayVideo,
+} from "@/services/api/native-relay-video";
+import {
   createImageEditTask,
   createImageGenerationTask,
   fetchImageTasks,
@@ -200,7 +204,6 @@ import {
   type CanvasNodeGenerationMode,
 } from "../components/canvas-node-prompt-panel";
 import { CanvasStoryDirectorPanel } from "../components/canvas-story-director-panel";
-import { useAutoResizeTextarea } from "../components/use-auto-resize-textarea";
 import { CanvasToolbar } from "../components/canvas-toolbar";
 import {
   AssetPickerModal,
@@ -211,6 +214,7 @@ import { CanvasZoomControls } from "../components/canvas-zoom-controls";
 import { useCanvasStore, type CanvasProject } from "../stores/use-canvas-store";
 import {
   buildSeedance2WorkflowNodes,
+  defaultSeedancePromptTemplate,
   compactBulkSeedance2PlaceholderPanels,
   createSeedance2ResultMetadata,
   createSeedance2VideoPlaceholderMetadata,
@@ -819,6 +823,13 @@ function customerVideoTaskListUrl(taskId: string, apiConfig: CustomerVideoApiCon
   return `${apiBase}/v1/tasks`;
 }
 
+function customerVideoNativePollPath(taskId: string, apiConfig: CustomerVideoApiConfig) {
+  const encodedTaskId = encodeURIComponent(taskId);
+  return apiConfig.route?.mode === "local"
+    ? `videos/generations/tasks/${encodedTaskId}`
+    : `api/tasks/${encodedTaskId}`;
+}
+
 function customerVideoTaskFromResponse(data: CustomerVideoTaskResponse, taskId: string) {
   return findCustomerVideoTaskById(data, taskId) || data.task || data;
 }
@@ -830,7 +841,7 @@ function findCustomerVideoTaskById(data: CustomerVideoTaskResponse, taskId: stri
   return tasks.find((task) => task.task_id === cleanTaskId || task.id === cleanTaskId);
 }
 
-function isCustomerVideoTaskEndpointMissing(response: Response, data: CustomerVideoTaskResponse) {
+function isCustomerVideoTaskEndpointMissing(response: Pick<Response, "status">, data: CustomerVideoTaskResponse) {
   const message = String(data.message || data.code || "").toLowerCase();
   return response.status === 404 || message.includes("not found") || message.includes("page not found");
 }
@@ -972,17 +983,58 @@ function buildSeedance2CustomerVideoPayload(
   };
 }
 
+type CustomerVideoRequestResult = {
+  ok: boolean;
+  status: number;
+  data: CustomerVideoTaskResponse;
+};
+
+async function executeCustomerVideoRequest(
+  apiConfig: CustomerVideoApiConfig,
+  options: {
+    method: "GET" | "POST";
+    nativePath: string;
+    browserUrl: string;
+    body?: string;
+  },
+): Promise<CustomerVideoRequestResult> {
+  if (shouldUseNativeRelayVideo()) {
+    return requestNativeRelayVideo<CustomerVideoTaskResponse>({
+      method: options.method,
+      baseUrl: apiConfig.baseUrl,
+      apiKey: apiConfig.apiKey,
+      path: options.nativePath,
+      body: options.body,
+    });
+  }
+
+  const response = await fetch(options.browserUrl, {
+    method: options.method,
+    headers:
+      options.method === "POST"
+        ? customerVideoApiHeaders(apiConfig)
+        : customerVideoPollHeaders(apiConfig),
+    body: options.body,
+  });
+  return {
+    ok: response.ok,
+    status: response.status,
+    data: (await response.json().catch(() => ({}))) as CustomerVideoTaskResponse,
+  };
+}
+
 async function requestCustomerVideoTask(
   payload: Seedance2CustomerVideoPayload,
   apiConfig: CustomerVideoApiConfig,
 ) {
   try {
-    const response = await fetch(customerVideoCreateUrl(apiConfig), {
+    const response = await executeCustomerVideoRequest(apiConfig, {
       method: "POST",
-      headers: customerVideoApiHeaders(apiConfig),
+      nativePath: "videos/generations",
+      browserUrl: customerVideoCreateUrl(apiConfig),
       body: JSON.stringify(payload),
     });
-    const data = (await response.json().catch(() => ({}))) as CustomerVideoTaskResponse;
+    const data = response.data;
     if (!response.ok || data.success === false) {
       throw new Error(data.message || data.code || `Video task submit failed (${response.status})`);
     }
@@ -997,16 +1049,20 @@ async function fetchCustomerVideoTask(
   apiConfig: CustomerVideoApiConfig,
 ) {
   try {
-    const response = await fetch(customerVideoPollUrl(taskId, apiConfig), {
-      headers: customerVideoPollHeaders(apiConfig),
+    const response = await executeCustomerVideoRequest(apiConfig, {
+      method: "GET",
+      nativePath: customerVideoNativePollPath(taskId, apiConfig),
+      browserUrl: customerVideoPollUrl(taskId, apiConfig),
     });
-    const data = (await response.json().catch(() => ({}))) as CustomerVideoTaskResponse;
+    const data = response.data;
     if (!response.ok || data.success === false) {
       if (isCustomerVideoTaskEndpointMissing(response, data)) {
-        const listResponse = await fetch(customerVideoTaskListUrl(taskId, apiConfig), {
-          headers: customerVideoPollHeaders(apiConfig),
+        const listResponse = await executeCustomerVideoRequest(apiConfig, {
+          method: "GET",
+          nativePath: "tasks",
+          browserUrl: customerVideoTaskListUrl(taskId, apiConfig),
         });
-        const listData = (await listResponse.json().catch(() => ({}))) as CustomerVideoTaskResponse;
+        const listData = listResponse.data;
         if (!listResponse.ok || listData.success === false) {
           throw new Error(listData.message || listData.code || `Video task query failed (${listResponse.status})`);
         }
@@ -1612,12 +1668,8 @@ function Seedance2WorkflowPanel({
   const textModelOptions = seedance2PromptTextModelValues(
     node, effectiveConfig, selectableModelsByCapability(effectiveConfig, "text"),
   );
-  const { textareaRef: promptTemplateTextareaRef } = useAutoResizeTextarea({
-    value: meta.seedancePromptTemplate || "",
-    minHeight: SEEDANCE2_PROMPT_TEMPLATE_TEXTAREA_MIN_HEIGHT,
-  });
   const panelClass = embedded
-    ? "flex min-h-full w-full flex-col overflow-visible rounded-[26px] border p-4"
+    ? "flex h-full min-h-0 w-full flex-col overflow-hidden rounded-[26px] border p-4"
     : "w-[560px] rounded-2xl border p-4 shadow-xl backdrop-blur";
   const sourceHint = storyDirectorSource
     ? "已找到故事导演来源：将按故事导演分镜顺序创建视频占位框，并自动带入分镜图作为当前分镜参考。"
@@ -1708,11 +1760,12 @@ function Seedance2WorkflowPanel({
       <label className="mt-3 grid gap-1 text-xs" data-canvas-no-drag data-canvas-no-zoom>
         <span style={{ color: theme.node.muted }}>视频提示词模板</span>
         <textarea
-          ref={promptTemplateTextareaRef}
-          className="thin-scrollbar resize-y rounded-lg border px-2 py-2 text-sm leading-5 outline-none"
+          className="thin-scrollbar block h-[220px] max-h-[220px] min-h-0 w-full resize-none overflow-y-auto overscroll-contain rounded-lg border px-2 py-2 text-sm leading-5 outline-none"
           style={{ ...fieldStyle, minHeight: SEEDANCE2_PROMPT_TEMPLATE_TEXTAREA_MIN_HEIGHT }}
           value={meta.seedancePromptTemplate || ""}
           onChange={(event) => patch({ seedancePromptTemplate: event.target.value })}
+          onWheel={(event) => event.stopPropagation()}
+          data-canvas-wheel-scroll
         />
       </label>
       <div className="mt-4 flex gap-2" data-canvas-no-drag data-canvas-no-zoom>
@@ -3130,7 +3183,10 @@ function InfiniteCanvasPage() {
 
         setRunningNodeId(workflowNode.id);
         try {
-          const rewriteTemplate = typeof meta.seedancePromptTemplate === "string" ? meta.seedancePromptTemplate : "";
+          const configuredTemplate = typeof meta.seedancePromptTemplate === "string"
+            ? meta.seedancePromptTemplate.trim()
+            : "";
+          const rewriteTemplate = configuredTemplate || defaultSeedancePromptTemplate();
           const rewriteInput = collectSeedance2StoryRewriteInput({
             storyDirector,
             nodes: nodesRef.current,

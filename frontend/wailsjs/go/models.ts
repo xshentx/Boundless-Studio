@@ -30,6 +30,22 @@ export namespace main {
 	        this.message = source["message"];
 	    }
 	}
+	export class RelayVideoResponse {
+	    status: number;
+	    body: string;
+	    message: string;
+
+	    static createFrom(source: any = {}) {
+	        return new RelayVideoResponse(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.status = source["status"];
+	        this.body = source["body"];
+	        this.message = source["message"];
+	    }
+	}
 	export class UpdateState {
 	    phase: string;
 	    currentVersion: string;

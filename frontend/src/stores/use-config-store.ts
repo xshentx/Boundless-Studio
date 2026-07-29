@@ -127,6 +127,7 @@ type ConfigStore = {
     isPublicSettingsLoading: boolean;
     isConfigOpen: boolean;
     shouldPromptContinue: boolean;
+    hydrated: boolean;
     updateConfig: <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => void;
     updateWebdavConfig: <K extends keyof WebdavSyncConfig>(key: K, value: WebdavSyncConfig[K]) => void;
     loadPublicSettings: () => Promise<void>;
@@ -134,6 +135,7 @@ type ConfigStore = {
     openConfigDialog: (shouldPromptContinue?: boolean) => void;
     setConfigDialogOpen: (isOpen: boolean) => void;
     clearPromptContinue: () => void;
+    setHydrated: (hydrated: boolean) => void;
 };
 
 function resolveEffectiveConfig(config: AiConfig, _modelChannel: AdminPublicSettings["modelChannel"] | null) {
@@ -224,6 +226,7 @@ export const useConfigStore = create<ConfigStore>()(
             isPublicSettingsLoading: false,
             isConfigOpen: false,
             shouldPromptContinue: false,
+            hydrated: false,
             updateConfig: (key, value) =>
                 set((state) => ({
                     config: {
@@ -239,7 +242,10 @@ export const useConfigStore = create<ConfigStore>()(
                     },
                 })),
             loadPublicSettings: async () => {
-                if (get().isPublicSettingsLoading) return;
+                // Any Zustand set before asynchronous persistence hydration
+                // finishes would serialize the in-memory defaults and can
+                // overwrite the saved relay/model routing configuration.
+                if (!get().hydrated || get().isPublicSettingsLoading) return;
                 set({ isPublicSettingsLoading: true });
                 try {
                     set({ publicSettings: await apiGet<AdminPublicSettings>("/api/public-settings") });
@@ -251,6 +257,7 @@ export const useConfigStore = create<ConfigStore>()(
             openConfigDialog: (shouldPromptContinue = false) => set({ isConfigOpen: true, shouldPromptContinue }),
             setConfigDialogOpen: (isConfigOpen) => set({ isConfigOpen }),
             clearPromptContinue: () => set({ shouldPromptContinue: false }),
+            setHydrated: (hydrated) => set({ hydrated }),
         }),
         {
             name: CONFIG_STORE_KEY,
@@ -288,6 +295,13 @@ export const useConfigStore = create<ConfigStore>()(
                     webdav: { ...defaultWebdavSyncConfig, ...persistedWebdav },
                     config: normalizedConfig,
                 };
+            },
+            onRehydrateStorage: (initialState) => (state, error) => {
+                // Zustand passes an undefined state when storage parsing or
+                // merging fails. Fall back to the in-memory defaults instead of
+                // leaving the entire application on its hydration loading page.
+                if (error) console.error("Failed to restore local configuration; using defaults.", error);
+                (state || initialState).setHydrated(true);
             },
         },
     ),

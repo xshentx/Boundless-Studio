@@ -20,6 +20,7 @@ import (
 
 const desktopAPIPort = "34116"
 const desktopClientConfigStateKey = "desktop:client_config"
+const maxRelayVideoResponseSize = 8 << 20
 
 type ClientConfig struct {
 	UpstreamURL      string `json:"upstreamUrl"`
@@ -30,6 +31,12 @@ type RelayModelsResponse struct {
 	Models  []string `json:"models"`
 	Status  int      `json:"status"`
 	Message string   `json:"message"`
+}
+
+type RelayVideoResponse struct {
+	Status  int    `json:"status"`
+	Body    string `json:"body"`
+	Message string `json:"message"`
 }
 
 type RelayServer struct {
@@ -477,6 +484,123 @@ func (s *RelayServer) FetchModels(ctx context.Context, baseURL, apiKey string) R
 		models = append(models, id)
 	}
 	return RelayModelsResponse{Models: models, Status: response.StatusCode}
+}
+
+// RequestRelayVideo sends the small JSON requests used to create and poll
+// OpenAI-compatible video jobs through Go's native HTTP client. Packaged macOS
+// pages use the wails: scheme, and WKWebView can block their browser request to
+// the HTTP loopback proxy before that request reaches the desktop application.
+func (s *RelayServer) RequestRelayVideo(ctx context.Context, method, baseURL, apiKey, relayPath, requestBody string) RelayVideoResponse {
+	method = strings.ToUpper(strings.TrimSpace(method))
+	relayPath = strings.Trim(strings.TrimSpace(relayPath), "/")
+	if !isAllowedRelayVideoRequest(method, relayPath) {
+		return RelayVideoResponse{Message: "unsupported relay video request"}
+	}
+
+	target, err := buildRelayVideoTarget(baseURL, relayPath)
+	if err != nil {
+		return RelayVideoResponse{Message: err.Error()}
+	}
+
+	var body io.Reader
+	if method == http.MethodPost {
+		body = strings.NewReader(requestBody)
+	}
+	request, err := http.NewRequestWithContext(ctx, method, target.String(), body)
+	if err != nil {
+		return RelayVideoResponse{Message: err.Error()}
+	}
+	if key := strings.TrimSpace(apiKey); key != "" {
+		request.Header.Set("Authorization", "Bearer "+key)
+	}
+	request.Header.Set("Accept", "application/json")
+	if method == http.MethodPost {
+		request.Header.Set("Content-Type", "application/json")
+	}
+
+	response, err := s.client.Do(request)
+	if err != nil {
+		return RelayVideoResponse{Message: "fetch failed: " + err.Error()}
+	}
+	defer response.Body.Close()
+
+	responseBody, err := io.ReadAll(io.LimitReader(response.Body, maxRelayVideoResponseSize+1))
+	if err != nil {
+		return RelayVideoResponse{Status: response.StatusCode, Message: "fetch failed while reading response: " + err.Error()}
+	}
+	if len(responseBody) > maxRelayVideoResponseSize {
+		return RelayVideoResponse{
+			Status:  response.StatusCode,
+			Message: "relay video response exceeds 8 MiB limit",
+		}
+	}
+	return RelayVideoResponse{Status: response.StatusCode, Body: string(responseBody)}
+}
+
+func buildRelayVideoTarget(baseURL, relayPath string) (*url.URL, error) {
+	for _, taskRoute := range []struct {
+		prefix   string
+		basePath string
+		legacy   bool
+	}{
+		{prefix: "videos/generations/tasks/", basePath: "videos/generations/tasks"},
+		{prefix: "api/tasks/", basePath: "api/tasks", legacy: true},
+	} {
+		encodedTaskID, found := strings.CutPrefix(relayPath, taskRoute.prefix)
+		if !found {
+			continue
+		}
+		taskID, err := url.PathUnescape(encodedTaskID)
+		if err != nil || taskID == "" {
+			return nil, errors.New("invalid video task ID")
+		}
+
+		var target *url.URL
+		if taskRoute.legacy {
+			normalized, normalizeErr := normalizeHTTPBaseURL(baseURL)
+			if normalizeErr != nil || normalized == "" {
+				return nil, errors.New("invalid video API Base URL")
+			}
+			target, _ = url.Parse(normalized)
+			target.Path = strings.TrimRight(target.Path, "/") + "/" + taskRoute.basePath
+			target.RawPath = ""
+		} else {
+			target, err = buildLocalRelayTarget(baseURL, taskRoute.basePath, "")
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		return appendRelayVideoTaskID(target, taskID), nil
+	}
+
+	return buildLocalRelayTarget(baseURL, relayPath, "")
+}
+
+func appendRelayVideoTaskID(target *url.URL, taskID string) *url.URL {
+	escapedBasePath := strings.TrimRight(target.EscapedPath(), "/")
+	target.Path = strings.TrimRight(target.Path, "/") + "/" + taskID
+	target.RawPath = escapedBasePath + "/" + url.PathEscape(taskID)
+	return target
+}
+
+func isAllowedRelayVideoRequest(method, relayPath string) bool {
+	if method == http.MethodPost {
+		return relayPath == "videos/generations"
+	}
+	if method != http.MethodGet {
+		return false
+	}
+	if relayPath == "tasks" {
+		return true
+	}
+	for _, taskPrefix := range []string{"videos/generations/tasks/", "api/tasks/"} {
+		taskID := strings.TrimPrefix(relayPath, taskPrefix)
+		if taskID != relayPath && taskID != "" && !strings.Contains(taskID, "/") {
+			return true
+		}
+	}
+	return false
 }
 
 func relayResponseMessage(body []byte, fallback string) string {

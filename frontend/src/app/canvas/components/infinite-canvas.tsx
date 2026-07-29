@@ -5,7 +5,6 @@ import React, { useEffect, useRef, useState } from "react";
 import { canvasThemes, type CanvasBackgroundMode } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
 import type { ViewportTransform } from "../types";
-import { canScrollCanvasWheelTarget } from "./canvas-wheel-scroll";
 
 type InfiniteCanvasProps = {
     containerRef: React.RefObject<HTMLDivElement | null>;
@@ -78,7 +77,7 @@ export function InfiniteCanvas({ containerRef, viewport, backgroundMode = "lines
 
     const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
         const target = event.target instanceof Element ? event.target : null;
-        if (target?.closest("[data-canvas-no-zoom],.ant-modal,.ant-popover,.ant-dropdown,.ant-select-dropdown,.ant-picker-dropdown")) return;
+        if (target?.closest("[data-canvas-no-zoom],[data-canvas-wheel-scroll],textarea,input,select,[contenteditable='true'],.ant-modal,.ant-popover,.ant-dropdown,.ant-select-dropdown,.ant-picker-dropdown")) return;
 
         const zoomAtPointer = (deltaY: number) => {
             const delta = -deltaY;
@@ -202,11 +201,11 @@ export function InfiniteCanvas({ containerRef, viewport, backgroundMode = "lines
 
         const preventWheelScroll = (event: WheelEvent) => {
             const target = event.target instanceof Element ? event.target : null;
-            const scrollTarget = target?.closest<HTMLElement>("[data-canvas-wheel-scroll]");
-            // This native listener runs before React's delegated onWheel
-            // handlers. Do not cancel the browser default while an embedded
-            // prompt editor can still consume the wheel movement.
-            if (scrollTarget && canScrollCanvasWheelTarget(scrollTarget, event.deltaY)) return;
+            // Keep wheel gestures inside form controls and embedded editors,
+            // including when their scroll position is already at a boundary.
+            // The React wheel handler also ignores these targets, so the same
+            // gesture can never fall through to canvas zooming.
+            if (target?.closest("[data-canvas-wheel-scroll],textarea,input,select,[contenteditable='true']")) return;
             event.preventDefault();
         };
         container.addEventListener("wheel", preventWheelScroll, { passive: false });

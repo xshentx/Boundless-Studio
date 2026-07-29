@@ -32,7 +32,7 @@ assert.doesNotMatch(panelSource, /恢复默认/, "Seedance2 workflow panel shoul
 assert.doesNotMatch(panelSource, /参考图顺序（每行一个）/, "Seedance2 workflow panel should not render the reference order textarea label");
 assert.doesNotMatch(panelSource, /referenceOrderTextareaRef/, "Seedance2 workflow panel should not keep reference order textarea wiring");
 assert.match(panelSource, /视频提示词模板/, "Seedance2 workflow panel should keep the prompt template textarea label");
-assert.match(panelSource, /promptTemplateTextareaRef/, "Seedance2 workflow panel should keep prompt template textarea wiring");
+assert.match(panelSource, /value=\{meta\.seedancePromptTemplate \|\| ""\}[\s\S]*onChange=\{\(event\) => patch\(\{ seedancePromptTemplate: event\.target\.value \}\)\}/, "Seedance2 workflow panel should persist prompt template edits");
 assert.match(
   canvasClientSource,
   /const SEEDANCE2_PROMPT_TEMPLATE_TEXTAREA_MIN_HEIGHT\s*=\s*196/,
@@ -40,8 +40,8 @@ assert.match(
 );
 assert.match(
   panelSource,
-  /minHeight:\s*SEEDANCE2_PROMPT_TEMPLATE_TEXTAREA_MIN_HEIGHT/,
-  "Seedance2 workflow prompt template textarea auto-resize should use the 196px minimum height",
+  /h-\[220px\][^"\n]*max-h-\[220px\][^"\n]*overflow-y-auto/,
+  "Seedance2 workflow prompt template textarea should stay bounded and scroll internally",
 );
 assert.match(
   panelSource,

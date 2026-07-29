@@ -10,6 +10,8 @@ export function GetClientConfig():Promise<main.ClientConfig>;
 
 export function GetUpdateState():Promise<main.UpdateState>;
 
+export function RequestRelayVideo(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<main.RelayVideoResponse>;
+
 export function SetAutoCheckUpdates(arg1:boolean):Promise<void>;
 
 export function SetUpstreamURL(arg1:string):Promise<void>;

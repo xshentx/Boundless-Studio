@@ -30,6 +30,7 @@ const AUTO_WEBDAV_SYNC_DELAY_MS = 2_500;
 
 export function CanvasProviders({ children }: { children: ReactNode }) {
   const theme = useThemeStore((state) => state.theme);
+  const configHydrated = useConfigStore((state) => state.hydrated);
   const loadPublicSettings = useConfigStore((state) => state.loadPublicSettings);
   const updateWebdavConfig = useConfigStore((state) => state.updateWebdavConfig);
   const webdav = useConfigStore((state) => state.webdav);
@@ -45,8 +46,9 @@ export function CanvasProviders({ children }: { children: ReactNode }) {
   const syncFingerprint = useMemo(() => buildSyncFingerprint(projects, assets), [projects, assets]);
 
   useEffect(() => {
+    if (!configHydrated) return;
     void loadPublicSettings();
-  }, [loadPublicSettings]);
+  }, [configHydrated, loadPublicSettings]);
 
   useEffect(() => {
     if (!canvasHydrated || !assetHydrated) {
@@ -107,6 +109,10 @@ export function CanvasProviders({ children }: { children: ReactNode }) {
       root.style.colorScheme = previousColorScheme;
     };
   }, [dark, theme]);
+
+  if (!configHydrated) {
+    return <div className="h-screen bg-stone-950" aria-label="Loading local configuration" />;
+  }
 
   return (
     <ConfigProvider locale={zhCN} theme={getAntThemeConfig(dark)}>

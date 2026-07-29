@@ -30,4 +30,14 @@ assert.match(dialog, /<UpdateSettingsPanel\s*\/>/u);
 const providers = read("src/app/canvas/canvas-providers.tsx");
 assert.match(providers, /<UpdateNotificationBridge\s*\/>/u, "automatic checks must surface available releases globally");
 
+const notificationBridge = read("src/components/update-notification-bridge.tsx");
+assert.match(
+    notificationBridge,
+    /subscribeDesktopUpdateState\(showAvailableUpdate\)[\s\S]*autoCheckUpdates[\s\S]*checkDesktopUpdate\(\)/u,
+    "the startup check must begin only after the global update listener is registered",
+);
+
+const app = read("../app.go");
+assert.doesNotMatch(app, /startAutomaticUpdateCheck\(ctx\)/u, "OnStartup must not race the frontend update listener");
+
 console.log("desktop GitHub Releases updater UI contract tests passed");

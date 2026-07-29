@@ -5,20 +5,11 @@ import { fileURLToPath } from "node:url";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(testDir, "..");
-const hookPath = join(
-  repoRoot,
-  "src/app/canvas/components/use-auto-resize-textarea.ts",
-);
-const canvasNodePath = join(
-  repoRoot,
-  "src/app/canvas/components/canvas-node.tsx",
-);
-const canvasClientPath = join(
-  repoRoot,
-  "src/app/canvas/workspace/canvas-client-page.tsx",
-);
+const hookPath = join(repoRoot, "src/app/canvas/components/use-auto-resize-textarea.ts");
+const canvasNodePath = join(repoRoot, "src/app/canvas/components/canvas-node.tsx");
+const canvasClientPath = join(repoRoot, "src/app/canvas/workspace/canvas-client-page.tsx");
 
-assert.equal(existsSync(hookPath), true, "shared textarea auto-resize hook should exist");
+assert.equal(existsSync(hookPath), true, "shared textarea auto-resize hook should remain available for other editors");
 
 const hookSource = readFileSync(hookPath, "utf8");
 const canvasNodeSource = readFileSync(canvasNodePath, "utf8");
@@ -28,52 +19,43 @@ assert.match(hookSource, /export function useAutoResizeTextarea/, "hook should e
 assert.match(
   hookSource,
   /textarea\.style\.height\s*=\s*["']0px["'][\s\S]*textarea\.scrollHeight/,
-  "hook should collapse before reading scrollHeight so content can shrink",
-);
-assert.match(
-  hookSource,
-  /manualHeightRef[\s\S]*new ResizeObserver/,
-  "hook should track native/manual textarea resize separately from content resize",
+  "hook should still support content-aware sizing where explicitly used",
 );
 
-assert.match(canvasClientSource, /useAutoResizeTextarea/, "Seedance2 workflow panel textareas should use shared auto-resize logic");
-assert.match(canvasClientSource, /promptTemplateTextareaRef/, "prompt template textarea should have an auto-resize ref");
-assert.match(canvasClientSource, /data-seedance2-workflow-panel/, "embedded Seedance2 workflow should expose a stable panel target for outer-height observation");
-assert.match(
-  canvasNodeSource,
-  /const SEEDANCE2_WORKFLOW_MIN_HEIGHT = NODE_DEFAULT_SIZE\[CanvasNodeType\.Seedance2Workflow\]\.height/,
-  "Seedance2 workflow should retain its vertical default frame as the outer-height minimum",
-);
-assert.match(
-  canvasNodeSource,
-  /const autoHeightPanel = isStoryDirector[\s\S]*selector: "\[data-story-director-panel\]"[\s\S]*minHeight: STORY_DIRECTOR_MIN_HEIGHT[\s\S]*isSeedance2Workflow[\s\S]*selector: "\[data-seedance2-workflow-panel\]"[\s\S]*minHeight: SEEDANCE2_WORKFLOW_MIN_HEIGHT/,
-  "CanvasNode should select Story Director and Seedance2 workflow panels with their own minimum heights",
-);
-assert.match(
-  canvasNodeSource,
-  /querySelector\(autoHeightPanel\.selector\)[\s\S]*Math\.max\(\s*autoHeightPanel\.minHeight,\s*Math\.ceil\(measuredHeight \+ 4\),\s*\)/,
-  "the shared observer should measure its selected panel and resize only above that panel's minimum height",
-);
-assert.doesNotMatch(
-  canvasClientSource,
-  /max-h-\[78vh\]/,
-  "Seedance2 workflow should grow its canvas node instead of capping the panel with internal scrolling",
-);
+const panelStart = canvasClientSource.indexOf("function Seedance2WorkflowPanel");
+const panelEnd = canvasClientSource.indexOf("function InfiniteCanvasPage", panelStart);
+assert.ok(panelStart >= 0 && panelEnd > panelStart);
+const panelSource = canvasClientSource.slice(panelStart, panelEnd);
 
 assert.doesNotMatch(
-  canvasNodeSource,
-  /\? `flex min-h-0 min-w-0 flex-col gap-2 overflow-y-auto p-2/,
-  "portrait Seedance2 prompt root should not scroll internally; the prompt textarea/red box should expand first",
+  panelSource,
+  /useAutoResizeTextarea|promptTemplateTextareaRef/,
+  "the workflow prompt template must not auto-grow with unbounded content",
+);
+assert.match(
+  panelSource,
+  /h-\[220px\][^"\n]*max-h-\[220px\][^"\n]*resize-none[^"\n]*overflow-y-auto/,
+  "the workflow prompt template should keep a bounded height and scroll internally",
+);
+assert.match(
+  panelSource,
+  /data-canvas-wheel-scroll/,
+  "the workflow prompt template should opt into native wheel scrolling inside the canvas",
+);
+assert.match(
+  panelSource,
+  /onWheel=\{\(event\) => event\.stopPropagation\(\)\}/,
+  "the workflow prompt template wheel should not zoom the canvas",
 );
 assert.doesNotMatch(
   canvasNodeSource,
-  /max-h-\[116px\]/,
-  "portrait Seedance2 prompt should not keep the old 116px cap that forces early internal scrolling",
+  /isSeedance2Workflow[\s\S]{0,180}selector:s*"\[data-seedance2-workflow-panel\]"/,
+  "Seedance2 workflow content changes must no longer auto-grow the canvas node",
 );
 assert.match(
   canvasNodeSource,
-  /const slotLayoutHeight = Number\(props\.node\.metadata\?\.seedanceManualMinHeight \|\| 0\) \|\| props\.node\.height;[\s\S]*height: slotLayoutHeight/,
-  "portrait visible reference slots should be based on manual node resize height, not prompt auto-growth node height",
+  /const autoHeightPanel = isStoryDirector[\s\S]*selector: "\[data-story-director-panel\]"/,
+  "Story Director should retain its independent auto-height behavior",
 );
 
-console.log("canvas auto-resize textarea tests passed");
+console.log("canvas bounded Seedance2 textarea tests passed");

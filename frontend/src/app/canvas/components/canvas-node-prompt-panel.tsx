@@ -15,7 +15,6 @@ import { CanvasAudioSettingsPopover, type CanvasAudioSettingKey } from "./canvas
 import { resolvePromptTextareaHeight } from "./canvas-prompt-panel-height";
 import { CanvasResourceMentionTextarea } from "./canvas-resource-mention-textarea";
 import { CanvasVideoSettingsPopover } from "./canvas-video-settings-popover";
-import { canScrollCanvasWheelTarget } from "./canvas-wheel-scroll";
 import { CanvasNodeType, type CanvasGenerationMode, type CanvasNodeData } from "../types";
 import type { CanvasResourceReference } from "../utils/canvas-resource-references";
 
@@ -169,9 +168,7 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
                     resetPromptTextareaManualHeight();
                     setIsPromptExpanded((expanded) => !expanded);
                 }}
-                onWheel={(event) => {
-                    if (canScrollCanvasWheelTarget(event.currentTarget, event.deltaY)) event.stopPropagation();
-                }}
+                onWheel={(event) => event.stopPropagation()}
             />
 
             <div className="mt-2 flex min-w-0 items-center justify-between gap-2">

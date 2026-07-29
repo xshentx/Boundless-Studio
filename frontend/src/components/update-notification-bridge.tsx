@@ -4,9 +4,13 @@ import { useEffect } from "react";
 import { App } from "antd";
 
 import { Button } from "@/components/ui/button";
-import { loadDesktopUpdateSettings, subscribeDesktopUpdateState, type DesktopUpdateState } from "@/services/desktop-updater";
+import {
+    checkDesktopUpdate,
+    loadDesktopUpdateSettings,
+    subscribeDesktopUpdateState,
+    type DesktopUpdateState,
+} from "@/services/desktop-updater";
 import { openApiSettings } from "@/services/settings-dialog";
-import { useConfigStore } from "@/stores/use-config-store";
 
 const notifiedVersions = new Set<string>();
 
@@ -14,8 +18,10 @@ export function UpdateNotificationBridge() {
     const { notification } = App.useApp();
 
     useEffect(() => {
+        let active = true;
+
         const showAvailableUpdate = (state: DesktopUpdateState) => {
-            if (!state.available || state.phase !== "available" || !state.latestVersion || notifiedVersions.has(state.latestVersion)) return;
+            if (!active || !state.available || state.phase !== "available" || !state.latestVersion || notifiedVersions.has(state.latestVersion)) return;
             notifiedVersions.add(state.latestVersion);
             notification.info({
                 key: `boundless-update-${state.latestVersion}`,
@@ -38,9 +44,34 @@ export function UpdateNotificationBridge() {
             });
         };
 
+        // Subscribe before starting the automatic check. The backend used to
+        // start this from OnStartup, which could emit "available" before React
+        // had mounted this bridge, so only a later manual check showed a prompt.
         const unsubscribe = subscribeDesktopUpdateState(showAvailableUpdate);
-        void loadDesktopUpdateSettings().then(({ state }) => showAvailableUpdate(state)).catch(() => undefined);
-        return unsubscribe;
+        void (async () => {
+            try {
+                const { autoCheckUpdates, state } = await loadDesktopUpdateSettings();
+                if (!active) return;
+
+                // Preserve an already-known available state (for example after
+                // this component remounts) before deciding whether to check.
+                showAvailableUpdate(state);
+                if (!autoCheckUpdates || state.phase !== "idle" || state.checkedAt) return;
+
+                // The listener is now ready, so an available result will always
+                // surface immediately. Checking the returned state is an extra
+                // safeguard if an event cannot be delivered by the webview.
+                showAvailableUpdate(await checkDesktopUpdate());
+            } catch {
+                // Automatic checks are silent on network errors. The update
+                // settings panel still exposes the error for a manual retry.
+            }
+        })();
+
+        return () => {
+            active = false;
+            unsubscribe();
+        };
     }, [notification]);
 
     return null;

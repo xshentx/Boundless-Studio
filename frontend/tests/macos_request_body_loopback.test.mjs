@@ -26,6 +26,14 @@ const webdavSource = readFileSync(join(frontendRoot, "src/services/webdav-sync.t
 const sharedRequestSource = readFileSync(join(frontendRoot, "src/lib/request.ts"), "utf8");
 const apiRequestSource = readFileSync(join(frontendRoot, "src/services/api/request.ts"), "utf8");
 const videoSource = readFileSync(join(frontendRoot, "src/services/api/video.ts"), "utf8");
+const nativeRelayVideoSource = readFileSync(
+  join(frontendRoot, "src/services/api/native-relay-video.ts"),
+  "utf8",
+);
+const canvasPageSource = readFileSync(
+  join(frontendRoot, "src/app/canvas/workspace/canvas-client-page.tsx"),
+  "utf8",
+);
 const appSource = readFileSync(join(frontendRoot, "../app.go"), "utf8");
 const relayGoSource = readFileSync(join(frontendRoot, "../relay.go"), "utf8");
 const macInfoPlist = readFileSync(join(frontendRoot, "../build/darwin/Info.plist"), "utf8");
@@ -37,6 +45,51 @@ assert.match(webdavSource, /fetch\(desktopApiUrl\("\/webdav-proxy"\)/, "WebDAV r
 assert.match(sharedRequestSource, /url:\s*desktopApiUrl\(path\)/, "shared JSON and multipart API requests must use the macOS loopback transport");
 assert.match(apiRequestSource, /url:\s*desktopApiUrl\(config\.url\)/, "auth and admin JSON requests must bypass the macOS Wails body stream");
 assert.match(videoSource, /axios\.post[^\n]+desktopApiUrl\("\/api\/v1\/media\/references"\)/, "reference media FormData uploads must bypass the macOS Wails body stream");
+assert.match(
+  nativeRelayVideoSource,
+  /shouldUseDesktopLoopback[\s\S]*RequestRelayVideo/,
+  "macOS video submit and polling must use the native Wails bridge instead of WKWebView fetch",
+);
+assert.match(
+  canvasPageSource,
+  /shouldUseNativeRelayVideo\(\)[\s\S]*requestNativeRelayVideo<CustomerVideoTaskResponse>/,
+  "Seedance customer video requests must select the native macOS transport",
+);
+assert.match(
+  canvasPageSource,
+  /nativePath:\s*"videos\/generations"[\s\S]*nativePath:\s*customerVideoNativePollPath\(taskId, apiConfig\)/,
+  "native video submit and task polling must use explicit route-aware relay paths",
+);
+assert.match(
+  canvasPageSource,
+  /function customerVideoNativePollPath[\s\S]*route\?\.mode === "local"[\s\S]*videos\/generations\/tasks\/[\s\S]*api\/tasks\//,
+  "macOS polling must retain the legacy direct /api/tasks endpoint when no global relay route is active",
+);
+assert.match(
+  canvasPageSource,
+  /function customerVideoNativePollPath[\s\S]*encodeURIComponent\(taskId\)[\s\S]*videos\/generations\/tasks\/\$\{encodedTaskId\}[\s\S]*api\/tasks\/\$\{encodedTaskId\}/,
+  "macOS polling must preserve opaque task IDs as one encoded URL path segment",
+);
+assert.match(
+  nativeRelayVideoSource,
+  /if \(response\.message\)[\s\S]*throw new Error\(response\.message\)[\s\S]*if \(!response\.status\)/,
+  "native transport and response-body errors must not be treated as successful HTTP responses",
+);
+assert.match(
+  nativeRelayVideoSource,
+  /JSON\.parse\(response\.body\)[\s\S]*throw new Error\(`Video relay returned invalid JSON/,
+  "invalid native video JSON responses must fail explicitly instead of becoming an empty success payload",
+);
+assert.match(
+  relayGoSource,
+  /LimitReader\(response\.Body, maxRelayVideoResponseSize\+1\)[\s\S]*len\(responseBody\) > maxRelayVideoResponseSize/,
+  "oversized native video responses must be detected instead of silently truncated",
+);
+assert.match(
+  appSource,
+  /func \(a \*App\) RequestRelayVideo\(/,
+  "the Wails app must expose native video relay requests",
+);
 assert.doesNotMatch(appSource, /_\s*=\s*a\.relay\.StartLoopback\(ctx\)/, "loopback bind errors must not be discarded");
 assert.match(appSource, /if err := a\.relay\.StartLoopback\(ctx\); err != nil/, "desktop startup must handle loopback bind errors");
 assert.match(appSource, /wailsruntime\.MessageDialog\(/, "loopback startup failures must be visible to the user");

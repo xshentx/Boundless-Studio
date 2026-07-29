@@ -53,7 +53,10 @@ func (a *App) startup(ctx context.Context) {
 	a.startSystemTray()
 	acknowledgeAppliedUpdate(os.Args)
 	cleanupLegacyVersionedExecutablesAtStartup()
-	a.startAutomaticUpdateCheck(ctx)
+	// The frontend starts the automatic update check after its global update
+	// listener is registered. Starting it here can finish before the webview is
+	// ready, causing the update-available event (and prompt) to be missed.
+	go cleanupStaleUpdateArtifacts(ctx)
 }
 
 func (a *App) shutdown(_ context.Context) {
@@ -123,6 +126,14 @@ func (a *App) FetchRelayModels(baseURL, apiKey string) RelayModelsResponse {
 	return a.relay.FetchModels(ctx, baseURL, apiKey)
 }
 
+func (a *App) RequestRelayVideo(method, baseURL, apiKey, relayPath, requestBody string) RelayVideoResponse {
+	ctx := a.runtimeContext()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return a.relay.RequestRelayVideo(ctx, method, baseURL, apiKey, relayPath, requestBody)
+}
+
 func (a *App) SetUpstreamURL(value string) error {
 	normalized, err := normalizeHTTPBaseURL(value)
 	if err != nil {
@@ -171,14 +182,4 @@ func (a *App) SetAutoCheckUpdates(enabled bool) error {
 		}
 	}
 	return nil
-}
-
-func (a *App) startAutomaticUpdateCheck(ctx context.Context) {
-	a.relay.mu.RLock()
-	enabled := a.relay.config.AutoCheckUpdates
-	a.relay.mu.RUnlock()
-	if enabled {
-		go func() { _, _ = a.updater.Check(ctx) }()
-	}
-	go cleanupStaleUpdateArtifacts(ctx)
 }

@@ -42,7 +42,6 @@ const selectionBlue = "#2f80ff";
 const IMAGE_WHEEL_SCALE_PRESETS = [0.55, 0.7, 0.85, 1, 1.25, 1.5, 1.75, 2, 2.4, 3, 3.8, 4.8, 6];
 const IMAGE_LABEL_ID_LENGTH = 4;
 const STORY_DIRECTOR_MIN_HEIGHT = NODE_DEFAULT_SIZE[CanvasNodeType.StoryDirector].height;
-const SEEDANCE2_WORKFLOW_MIN_HEIGHT = NODE_DEFAULT_SIZE[CanvasNodeType.Seedance2Workflow].height;
 const SEEDANCE2_RATIO_OPTIONS = ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"] as const;
 const SEEDANCE2_PORTRAIT_DEFAULT_REFERENCE_SLOT_COUNT = 2;
 const SEEDANCE2_LANDSCAPE_DEFAULT_REFERENCE_SLOT_COUNT = 4;
@@ -419,12 +418,7 @@ export const CanvasNode = React.memo(function CanvasNode({
                 selector: "[data-story-director-panel]",
                 minHeight: STORY_DIRECTOR_MIN_HEIGHT,
             }
-            : isSeedance2Workflow
-                ? {
-                    selector: "[data-seedance2-workflow-panel]",
-                    minHeight: SEEDANCE2_WORKFLOW_MIN_HEIGHT,
-                }
-                : null;
+            : null;
         if (!autoHeightPanel) return;
         const contentFrame = contentFrameRef.current;
         if (!contentFrame) return;
@@ -1012,11 +1006,6 @@ function Seedance2LandscapeVideoPlaceholderCard(props: {
                 className="absolute z-[2]"
                 style={{ ...seedance2HtmlLandscapeRectStyle(SEEDANCE2_HTML_LANDSCAPE_RECTS.divider), background: props.theme.node.stroke }}
                 aria-hidden="true"
-            />
-            <div
-                className="absolute left-1 top-1/2 z-[6] size-4 -translate-y-1/2 rounded-full border-2 border-[#171614] bg-orange-500 shadow-[0_0_0_2px_rgba(249,115,22,.75),0_0_22px_rgba(249,115,22,.7)]"
-                data-seedance2-reference-input
-                title="参考图统一输入点：多条参考图连线汇入同一个点，按连接先后上传"
             />
             <div
                 className="absolute z-[3] overflow-hidden rounded-[29px] border-[1.5px]"
@@ -1698,6 +1687,26 @@ function seedance2CompactPromptSummaryText(prompt: string, maxLength: number) {
     return oneLine.length > maxLength ? `${oneLine.slice(0, maxLength)}…` : oneLine;
 }
 
+function useDismissSeedance2PromptEditor(
+    isEditing: boolean,
+    rootRef: React.RefObject<HTMLElement | null>,
+    dismiss: () => void,
+) {
+    useEffect(() => {
+        if (!isEditing) return;
+        const handlePointerDown = (event: PointerEvent) => {
+            const target = event.target;
+            if (!(target instanceof Node)) return;
+            if (rootRef.current?.contains(target)) return;
+            if (target instanceof Element && target.closest('[data-canvas-resource-mention-menu="true"]')) return;
+            dismiss();
+        };
+        // Capture phase still runs when the canvas prevents the native blur while starting a pan.
+        document.addEventListener("pointerdown", handlePointerDown, true);
+        return () => document.removeEventListener("pointerdown", handlePointerDown, true);
+    }, [dismiss, isEditing, rootRef]);
+}
+
 function Seedance2LandscapeHtmlPromptArea({
     node,
     theme,
@@ -1717,8 +1726,11 @@ function Seedance2LandscapeHtmlPromptArea({
 }) {
     const prompt = node.metadata?.prompt || "";
     const [isEditingPrompt, setIsEditingPrompt] = useState(false);
+    const promptRootRef = useRef<HTMLDivElement | null>(null);
     const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
     const promptPreviewText = prompt.trim();
+    const dismissPromptEditor = useCallback(() => setIsEditingPrompt(false), []);
+    useDismissSeedance2PromptEditor(isEditingPrompt, promptRootRef, dismissPromptEditor);
 
     useEffect(() => {
         if (!isEditingPrompt) return;
@@ -1730,6 +1742,7 @@ function Seedance2LandscapeHtmlPromptArea({
 
     return (
         <div
+            ref={promptRootRef}
             className="pointer-events-none absolute inset-0 z-[3]"
             data-seedance2-inline-prompt
             data-seedance2-landscape-html-prompt
@@ -1783,7 +1796,8 @@ function Seedance2LandscapeHtmlPromptArea({
                         highlightLabels={false}
                         placeholder="描述当前镜头的视频内容。"
                         data-seedance2-inline-prompt-textarea
-                        onBlur={() => setIsEditingPrompt(false)}
+                        data-canvas-wheel-scroll
+                        onBlur={dismissPromptEditor}
                         onMouseDown={(event) => event.stopPropagation()}
                         onPointerDown={(event) => event.stopPropagation()}
                         onWheel={(event) => event.stopPropagation()}
@@ -1793,6 +1807,8 @@ function Seedance2LandscapeHtmlPromptArea({
                         className="h-full w-full cursor-text overflow-y-auto whitespace-pre-wrap break-words px-[23px] py-[18px] text-[26px] font-medium leading-[34px] select-text"
                         style={{ color: promptPreviewText ? theme.node.text : theme.node.muted }}
                         data-seedance2-inline-prompt-preview
+                        data-canvas-wheel-scroll
+                        onWheel={(event) => event.stopPropagation()}
                         onDoubleClick={(event) => {
                             event.stopPropagation();
                             setIsEditingPrompt(true);
@@ -1882,7 +1898,6 @@ function Seedance2PortraitPreviewArea({ node, theme, shot, status, mode }: { nod
     const hasVideo = Boolean(node.metadata?.content);
     return (
         <div className="relative flex min-h-0 justify-center border-b px-2 py-3" style={{ borderColor: theme.node.stroke }}>
-            <div data-seedance2-reference-input className="absolute left-1 top-1/2 z-10 size-4 -translate-y-1/2 rounded-full border-2 border-[#171614] bg-orange-500" />
             <div
                 className={`grid h-[200px] min-w-0 shrink-0 place-items-center overflow-hidden rounded-[24px] border ${hasVideo ? "bg-black" : "text-center"}`}
                 style={{ width: "calc(100% - 6px)", background: hasVideo ? undefined : theme.node.panel, borderColor: theme.node.stroke }}
@@ -2007,7 +2022,6 @@ function Seedance2LandscapeControlArea({ node, theme, shot, status, mode, ratio,
 
     return (
         <div className="relative flex h-full min-h-0 min-w-0 flex-col gap-2.5 overflow-hidden border-r p-3" style={{ borderColor: theme.node.stroke }} data-canvas-no-drag data-canvas-no-zoom>
-            <div data-seedance2-reference-input className="absolute left-1 top-1/2 z-10 size-4 -translate-y-1/2 rounded-full border-2 border-[#171614] bg-orange-500 shadow-[0_0_0_2px_rgba(249,115,22,.75),0_0_22px_rgba(249,115,22,.7)]" title="参考图统一输入点：多条参考图连线汇入同一个点，按连接先后上传" />
             <div className={`grid min-h-0 flex-[1.2] place-items-center overflow-hidden rounded-[24px] border ${hasVideo ? "bg-black" : "text-center"}`} style={{ background: hasVideo ? undefined : theme.node.panel, borderColor: theme.node.stroke }}>
                 {hasVideo ? (
                     <video src={node.metadata?.content} controls className="h-full w-full bg-black object-contain" data-canvas-no-zoom />
@@ -2114,7 +2128,6 @@ function Seedance2VideoPreviewArea({ node, theme, shot, status, mode, ratio, dur
     const referenceCount = Object.values(node.metadata?.seedanceReferenceSlotBindings || {}).filter((binding) => Boolean(binding?.value || binding?.nodeId)).length;
     return (
         <div className={`relative flex min-h-0 min-w-0 flex-col overflow-hidden p-3 ${className}`} style={{ background: theme.node.fill, borderColor: theme.node.stroke, color: theme.node.placeholder }}>
-            <div data-seedance2-reference-input className="absolute left-1 top-1/2 z-10 size-4 -translate-y-1/2 rounded-full border-2 border-[#171614] bg-orange-500 shadow-[0_0_0_2px_rgba(249,115,22,.75),0_0_22px_rgba(249,115,22,.7)]" title="参考图统一输入点：多条参考图连线汇入同一个点，按连接先后上传" />
             <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-2xl border" style={{ borderColor: theme.node.stroke, background: hasVideo ? "#050505" : theme.node.panel }}>
                 {hasVideo ? (
                     <video src={node.metadata?.content} controls className="h-full w-full bg-black object-contain" data-canvas-no-zoom />
@@ -2225,7 +2238,10 @@ function Seedance2InlinePromptEditor({ node, theme, mentionReferences, className
     const prompt = node.metadata?.prompt || "";
     const [isEditingPrompt, setIsEditingPrompt] = useState(false);
     const isPortraitVariant = variant === "portrait";
+    const promptRootRef = useRef<HTMLDivElement | null>(null);
     const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+    const dismissPromptEditor = useCallback(() => setIsEditingPrompt(false), []);
+    useDismissSeedance2PromptEditor(isEditingPrompt, promptRootRef, dismissPromptEditor);
     const rootClassName = isPortraitVariant
         ? `flex h-full min-h-0 min-w-0 flex-col gap-[3px] overflow-hidden px-2 pb-1 pt-[3px] ${className}`
         : `flex h-full min-h-0 min-w-0 flex-col gap-3 overflow-hidden p-3 ${className}`;
@@ -2252,7 +2268,7 @@ function Seedance2InlinePromptEditor({ node, theme, mentionReferences, className
     }, [isEditingPrompt]);
 
     return (
-        <div className={rootClassName} style={{ borderColor: theme.node.stroke }} data-seedance2-inline-prompt data-canvas-no-zoom>
+        <div ref={promptRootRef} className={rootClassName} style={{ borderColor: theme.node.stroke }} data-seedance2-inline-prompt data-canvas-no-zoom>
             {!isPortraitVariant ? (
                 <div className={headerClassName} style={{ color: theme.node.muted }}>
                     <span className="flex shrink-0 items-center gap-1 font-semibold" style={{ color: theme.node.text }}>
@@ -2291,7 +2307,8 @@ function Seedance2InlinePromptEditor({ node, theme, mentionReferences, className
                     highlightLabels={false}
                     placeholder="描述当前镜头的视频内容"
                     data-seedance2-inline-prompt-textarea
-                    onBlur={() => setIsEditingPrompt(false)}
+                    data-canvas-wheel-scroll
+                    onBlur={dismissPromptEditor}
                     onMouseDown={(event) => event.stopPropagation()}
                     onPointerDown={(event) => event.stopPropagation()}
                     onWheel={(event) => event.stopPropagation()}
@@ -2301,6 +2318,8 @@ function Seedance2InlinePromptEditor({ node, theme, mentionReferences, className
                     className={promptPreviewClassName}
                     style={{ background: theme.node.fill, borderColor: theme.node.stroke, color: promptPreviewText ? theme.node.text : theme.node.muted }}
                     data-seedance2-inline-prompt-preview
+                    data-canvas-wheel-scroll
+                    onWheel={(event) => event.stopPropagation()}
                     onDoubleClick={(event) => {
                         event.stopPropagation();
                         setIsEditingPrompt(true);
