@@ -1757,7 +1757,11 @@ function Seedance2LandscapeHtmlPromptArea({
                     type="button"
                     className="grid size-[26px] shrink-0 place-items-center rounded-full transition hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-35"
                     style={{ color: theme.node.muted }}
-                    disabled={!node.metadata?.seedanceAutoPrompt}
+                    disabled={
+                        isRunning ||
+                        !node.metadata?.seedanceStoryDirectorNodeId ||
+                        !node.metadata?.seedanceWorkflowNodeId
+                    }
                     data-seedance2-regenerate-prompt
                     aria-label="从分镜重新生成提示词"
                     title="从分镜重新生成提示词"
@@ -2276,7 +2280,11 @@ function Seedance2InlinePromptEditor({ node, theme, mentionReferences, className
                         <button
                             type="button"
                             className="grid size-6 shrink-0 place-items-center rounded-full transition hover:bg-black/10 disabled:cursor-not-allowed disabled:opacity-35"
-                            disabled={!node.metadata?.seedanceAutoPrompt}
+                            disabled={
+                                isRunning ||
+                                !node.metadata?.seedanceStoryDirectorNodeId ||
+                                !node.metadata?.seedanceWorkflowNodeId
+                            }
                             data-seedance2-regenerate-prompt
                             aria-label="从分镜重新生成提示词"
                             title="从分镜重新生成提示词"

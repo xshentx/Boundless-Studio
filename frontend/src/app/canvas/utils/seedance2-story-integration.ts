@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   CanvasConnection,
   CanvasNodeData,
   CanvasNodeMetadata,
@@ -284,18 +284,45 @@ export function collectSeedance2StoryRewriteInput(options: {
   nodes: CanvasNodeData[];
   connections: CanvasConnection[];
   template: string;
+  shotId?: string;
+  shotIndex?: number;
 }): Seedance2PromptRewriteInput {
   const { storyDirector, nodes, connections } = options;
   const storyValue = storyDirector.metadata?.storyText ?? storyDirector.metadata?.content ?? "";
   const story = typeof storyValue === "string" ? storyValue : "";
   if (!story.trim()) throw new Error("Seedance2 整批改写缺少完整故事内容");
-  const storyShots = [...(storyDirector.metadata?.storyShots || [])].sort((left, right) => left.index - right.index);
+  const allStoryShots = [...(storyDirector.metadata?.storyShots || [])].sort((left, right) => left.index - right.index);
+  const requestedShotId = stringValue(options.shotId);
+  const requestedShotIndex = positiveInteger(options.shotIndex);
+  const requestedShot =
+    allStoryShots.find((shot) => requestedShotId && shot.id === requestedShotId) ||
+    allStoryShots.find((shot) => requestedShotIndex && shot.index === requestedShotIndex);
+  const storyShots = requestedShotId || requestedShotIndex
+    ? (requestedShot ? [requestedShot] : [])
+    : allStoryShots;
   if (!storyShots.length) throw new Error("Seedance2 整批改写没有可用分镜");
   const imageNodes = nodes.filter((node) => node.type === CanvasNodeType.Image);
   const shots = storyShots.map((shot) => {
     const currentShot = findCurrentShotImageForStoryShot(shot, storyDirector, imageNodes, connections);
     if (!currentShot) throw new Error(`Seedance2 第 ${shot.index} 镜缺少当前分镜图`);
     const currentPrompt = typeof currentShot.metadata?.prompt === "string" ? currentShot.metadata.prompt : "";
+    const storyContext = {
+      sceneId: stringValue(shot.sceneId) || undefined,
+      appearingCharacterIds: Array.isArray(shot.appearingCharacterIds) ? shot.appearingCharacterIds : [],
+      excludedCharacterIds: Array.isArray(shot.excludedCharacterIds) ? shot.excludedCharacterIds : [],
+      action: stringValue(shot.action),
+      camera: stringValue(shot.camera),
+      emotion: stringValue(shot.emotion) || undefined,
+      continuityNote: stringValue(shot.continuityNote) || undefined,
+      characterState: stringValue(shot.characterState) || undefined,
+      visualContent: stringValue(shot.visualContent) || undefined,
+      voiceover: stringValue(shot.voiceover) || undefined,
+      imagePrompt: stringValue(shot.imagePrompt),
+      finalPrompt: stringValue(shot.finalPrompt) || undefined,
+    };
+    const hasStoryContext = Object.values(storyContext).some((value) =>
+      Array.isArray(value) ? value.length > 0 : Boolean(value),
+    );
     return {
       shotId: shot.id,
       shotIndex: shot.index,
@@ -303,6 +330,7 @@ export function collectSeedance2StoryRewriteInput(options: {
       sourceImageNodeId: currentShot.id,
       sourceImage: imageReferenceValue(currentShot),
       currentPrompt,
+      ...(hasStoryContext ? { storyContext } : {}),
     };
   });
   return { story, shots, template: options.template };
@@ -1002,7 +1030,7 @@ function isUsableImageReference(node: CanvasNodeData | undefined): node is Canva
 
 function imageReferenceValue(node: CanvasNodeData) {
   const metadata = node.metadata || {};
-  return [metadata.backendUrl, metadata.content, metadata.backendRel, metadata.storageKey]
+  return [metadata.storageKey, metadata.backendUrl, metadata.content, metadata.backendRel]
     .map((value) => stringValue(value))
     .find((value) => value && !value.startsWith("blob:"));
 }

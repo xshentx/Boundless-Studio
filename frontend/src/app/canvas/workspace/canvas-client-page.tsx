@@ -258,7 +258,10 @@ import {
   seedance2ResolvedSlotsToCustomerReferences,
   type Seedance2ResolvedReferenceSlot,
 } from "../utils/seedance2-reference-slots";
-import { hydrateSeedance2CustomerReferencesForTransport } from "../utils/seedance2-reference-transport";
+import {
+  hydrateSeedance2CustomerReferencesForTransport,
+  resolveSeedance2ReferenceTransportValue,
+} from "../utils/seedance2-reference-transport";
 import {
   buildVersionedStoryDirectorSlicePlaceholders,
   collectSeedance2StoryRewriteInput,
@@ -1672,8 +1675,8 @@ function Seedance2WorkflowPanel({
     ? "flex h-full min-h-0 w-full flex-col overflow-hidden rounded-[26px] border p-4"
     : "w-[560px] rounded-2xl border p-4 shadow-xl backdrop-blur";
   const sourceHint = storyDirectorSource
-    ? "已找到故事导演来源：将按故事导演分镜顺序创建视频占位框，并自动带入分镜图作为当前分镜参考。"
-    : "未连接故事导演：将按手动分镜数量创建空视频占位框。";
+    ? "已连接故事导演：创建或刷新时，将根据故事导演内容与视频提示词模板，为每个分镜生成视频提示词。"
+    : "请先连接包含分镜的故事导演；视频占位提示词必须由故事导演与视频提示词模板共同生成。";
 
   return (
     <div
@@ -1689,7 +1692,7 @@ function Seedance2WorkflowPanel({
             <span className="rounded-full bg-orange-500/15 px-2 py-0.5 text-[10px] font-medium text-orange-300">分镜式</span>
           </div>
           <div className="mt-1 text-xs leading-5" style={{ color: theme.node.muted }}>
-            选择视频参数和文本模型，按分镜数量创建下游视频占位框。
+            使用故事导演内容和视频提示词模板，为每个分镜创建下游视频占位框。
           </div>
         </div>
         {!embedded && onClose ? (
@@ -1769,7 +1772,7 @@ function Seedance2WorkflowPanel({
         />
       </label>
       <div className="mt-4 flex gap-2" data-canvas-no-drag data-canvas-no-zoom>
-        <button type="button" disabled={isCreatingPlaceholders} className="h-10 flex-1 rounded-xl bg-orange-500 px-3 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-wait disabled:opacity-60" onClick={() => onCreatePlaceholders(node)}>
+        <button type="button" disabled={isCreatingPlaceholders || !storyDirectorSource} className="h-10 flex-1 rounded-xl bg-orange-500 px-3 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60" onClick={() => onCreatePlaceholders(node)}>
           {isCreatingPlaceholders ? "正在整批改写..." : "创建 / 刷新视频占位框"}
         </button>
       </div>
@@ -3159,196 +3162,165 @@ function InfiniteCanvasPage() {
       nodesRef.current,
       connectionsRef.current,
     );
-    const creationRatio = resolveSeedance2WorkflowRatio({
-      storedRatio: meta.seedanceRatio || meta.size,
-      selection: resolveSeedance2WorkflowRatioSelection({
-        selection: meta.seedanceRatioSelection,
-        inheritSourceRatio: meta.seedanceInheritSourceRatio,
-        ratioTouched: meta.seedanceRatioTouched,
-      }),
-      upstreamRatio: storyDirector?.metadata?.storyAspectRatio,
-    });
-    const storyShotCount = storyDirector?.metadata?.storyShots?.length || 0;
-    if (storyDirector && storyShotCount > 0) {
-        const promptTextModel = resolveSeedance2PromptTextModel(workflowNode, effectiveConfig);
-        const textConfig = {
-          ...buildGenerationConfig(effectiveConfig, workflowNode, "text"),
-          textModel: promptTextModel,
-          model: promptTextModel,
-        };
-        if (!isAiConfigReady(textConfig, promptTextModel)) {
-          openConfigDialog(true);
-          return;
-        }
-
-        setRunningNodeId(workflowNode.id);
-        try {
-          const configuredTemplate = typeof meta.seedancePromptTemplate === "string"
-            ? meta.seedancePromptTemplate.trim()
-            : "";
-          const rewriteTemplate = configuredTemplate || defaultSeedancePromptTemplate();
-          const rewriteInput = collectSeedance2StoryRewriteInput({
-            storyDirector,
-            nodes: nodesRef.current,
-            connections: connectionsRef.current,
-            template: rewriteTemplate,
-          });
-          const rewriteInputWithModel = {
-            ...rewriteInput,
-            rewriteModel: promptTextModel,
-          };
-          const fingerprint = JSON.stringify({
-            story: rewriteInputWithModel.story,
-            template: rewriteInputWithModel.template,
-            rewriteModel: rewriteInputWithModel.rewriteModel,
-            shots: rewriteInputWithModel.shots.map((shot) => ({
-              shotId: shot.shotId,
-              shotIndex: shot.shotIndex,
-              sourceImageNodeId: shot.sourceImageNodeId,
-              sourceImage: shot.sourceImage,
-              currentPrompt: shot.currentPrompt,
-            })),
-          });
-          let run = seedance2RewriteRunCache.get(workflowNode.id);
-          if (!run || run.fingerprint !== fingerprint) {
-            const rewrittenShots = await rewriteSeedance2BatchPrompts(
-              rewriteInputWithModel,
-              async (request) => {
-                const content: ChatCompletionMessage["content"] = [
-                  { type: "text", text: request.contentText },
-                  ...request.shots.flatMap((shot) => {
-                    const imageParts: Array<
-                      { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }
-                    > = [
-                      {
-                        type: "text",
-                        text: `上游分镜图片 ${shot.shotId}（第 ${shot.shotIndex} 镜，${shot.title}）`,
-                      },
-                    ];
-                    if (shot.sourceImage) {
-                      imageParts.push({
-                        type: "image_url",
-                        image_url: { url: shot.sourceImage },
-                      });
-                    }
-                    return imageParts;
-                  }),
-                ];
-                return (
-                  (await requestImageQuestion(
-                    {
-                      ...textConfig,
-                      textModel: request.model,
-                      model: request.model,
-                    },
-                    [{ role: "user", content }],
-                    undefined,
-                    { stream: false },
-                  )) || ""
-                );
-              },
-            );
-            const built = buildVersionedStoryDirectorSlicePlaceholders({
-              workflowNode,
-              storyDirector,
-              nodes: nodesRef.current,
-              connections: connectionsRef.current,
-              rewrittenShots,
-              rewriteModel: promptTextModel,
-              rewriteTemplate,
-            });
-            run = {
-              fingerprint,
-              rewrittenShots,
-              built,
-              nextShotIndex: Math.min(...rewrittenShots.map((shot) => shot.shotIndex)),
-            };
-            seedance2RewriteRunCache.set(workflowNode.id, run);
-          }
-
-          const orderedCreatedNodes = [...run.built.createdNodes].sort(
-            (left, right) =>
-              Number(left.metadata?.seedanceStoryShotIndex || 0) -
-              Number(right.metadata?.seedanceStoryShotIndex || 0),
-          );
-          const sequential = createSeedance2SequentialPlaceholderRun({
-            rewrittenShots: orderedCreatedNodes.map((node) => ({
-              shotId: String(node.metadata?.seedanceStoryShotId || node.id),
-              shotIndex: Number(node.metadata?.seedanceStoryShotIndex || 0),
-              prompt: String(node.metadata?.prompt || ""),
-            })),
-            startShotIndex: run.nextShotIndex,
-            appendShot: (shot) => {
-              const node = orderedCreatedNodes.find(
-                (candidate) =>
-                  Number(candidate.metadata?.seedanceStoryShotIndex || 0) === shot.shotIndex,
-              );
-              if (!node) throw new Error(`Seedance2 第 ${shot.shotIndex} 镜占位框不存在`);
-              if (nodesRef.current.some((candidate) => candidate.id === node.id)) return;
-              const nextNodes = [...nodesRef.current, node];
-              const nextConnections = [
-                ...connectionsRef.current,
-                ...run.built.createdConnections.filter((connection) => connection.toNodeId === node.id),
-              ];
-              nodesRef.current = nextNodes;
-              connectionsRef.current = nextConnections;
-              setNodes(nextNodes);
-              setConnections(nextConnections);
-              persistCanvasSnapshot(nextNodes, nextConnections);
-              run.nextShotIndex = shot.shotIndex + 1;
-            },
-          });
-          if (sequential.error) throw sequential.error;
-          seedance2RewriteRunCache.delete(workflowNode.id);
-          setSelectedNodeIds(new Set([workflowNode.id]));
-          setSelectedConnectionId(null);
-          message.success(`已创建 Seedance2 视频占位框 V${run.built.setVersion}`);
-        } catch (error) {
-          const errorDetails = error instanceof Error ? error.message : "Seedance2 整批提示词改写失败";
-          message.error(errorDetails);
-        } finally {
-          setRunningNodeId(null);
-        }
-        return;
+    if (!storyDirector) {
+      message.error("请先连接故事导演，视频占位提示词必须由故事导演与视频提示词模板共同生成");
+      return;
     }
-    const existingPlaceholderIds = new Set(nodesRef.current.filter((node) => node.metadata?.seedanceWorkflowNodeId === workflowNode.id).map((node) => node.id));
-    const built = buildSeedance2WorkflowNodes({
-      origin: workflowNode.position,
-      shotCount: meta.seedanceShotCount || 4,
-      mode: "slice",
-      model: selectableModelsByCapability(effectiveConfig, "video").includes(String(meta.seedanceModel || meta.model || "").trim())
-        ? String(meta.seedanceModel || meta.model || "").trim()
-        : "",
-      ratio: creationRatio,
-      duration: meta.seedanceDuration || meta.seconds || "10",
-      resolution: normalizeSeedance2Resolution(meta.seedanceResolution || meta.vquality),
-      generateCount: 1,
-      apiProvider: "local",
-      apiEndpoint: meta.seedanceApiEndpoint || LOCAL_SEEDANCE2_API_ENDPOINT,
-      referenceOrder: Array.isArray(meta.seedanceReferenceOrder)
-        ? meta.seedanceReferenceOrder
-        : undefined,
-    });
-    const placeholders = built.nodes.slice(1).map((node) => {
-      const size = seedance2PlaceholderSize(
-        node.metadata?.seedanceRatio || node.metadata?.size || SEEDANCE2_CREATION_FALLBACK_RATIO,
-      );
-      return {
-        ...node,
-        width: size.width,
-        height: size.height,
-        metadata: { ...node.metadata, seedanceWorkflowNodeId: workflowNode.id },
+    const storyShotCount = storyDirector.metadata?.storyShots?.length || 0;
+    if (storyShotCount <= 0) {
+      message.error("故事导演没有可用分镜，无法生成视频占位提示词");
+      return;
+    }
+    const promptTextModel = resolveSeedance2PromptTextModel(workflowNode, effectiveConfig);
+    const textConfig = {
+      ...buildGenerationConfig(effectiveConfig, workflowNode, "text"),
+      textModel: promptTextModel,
+      model: promptTextModel,
+    };
+    if (!isAiConfigReady(textConfig, promptTextModel)) {
+      openConfigDialog(true);
+      return;
+    }
+
+    setRunningNodeId(workflowNode.id);
+    try {
+      const configuredTemplate = typeof meta.seedancePromptTemplate === "string"
+        ? meta.seedancePromptTemplate.trim()
+        : "";
+      const rewriteTemplate = configuredTemplate || defaultSeedancePromptTemplate();
+      const rewriteInput = collectSeedance2StoryRewriteInput({
+        storyDirector,
+        nodes: nodesRef.current,
+        connections: connectionsRef.current,
+        template: rewriteTemplate,
+      });
+      const rewriteInputWithModel = {
+        ...rewriteInput,
+        rewriteModel: promptTextModel,
       };
-    });
-    const nextConnections = placeholders.map((node, index) => ({
-      id: `conn-seedance2-${workflowNode.id}-${index + 1}-${Date.now()}`,
-      fromNodeId: workflowNode.id,
-      toNodeId: node.id,
-    }));
-    setNodes((prev) => [...prev.filter((node) => node.metadata?.seedanceWorkflowNodeId !== workflowNode.id), ...placeholders]);
-    setConnections((prev) => [...prev.filter((connection) => connection.fromNodeId !== workflowNode.id && !existingPlaceholderIds.has(connection.fromNodeId) && !existingPlaceholderIds.has(connection.toNodeId)), ...nextConnections]);
-    setSelectedNodeIds(new Set([workflowNode.id]));
-    setSelectedConnectionId(null);
+      const fingerprint = JSON.stringify({
+        story: rewriteInputWithModel.story,
+        template: rewriteInputWithModel.template,
+        rewriteModel: rewriteInputWithModel.rewriteModel,
+        shots: rewriteInputWithModel.shots.map((shot) => ({
+          shotId: shot.shotId,
+          shotIndex: shot.shotIndex,
+          sourceImageNodeId: shot.sourceImageNodeId,
+          sourceImage: shot.sourceImage,
+          currentPrompt: shot.currentPrompt,
+          storyContext: shot.storyContext,
+        })),
+      });
+      let run = seedance2RewriteRunCache.get(workflowNode.id);
+      if (!run || run.fingerprint !== fingerprint) {
+        const rewrittenShots = await rewriteSeedance2BatchPrompts(
+          rewriteInputWithModel,
+          async (request) => {
+            const transportShots = await Promise.all(
+              request.shots.map(async (shot) => ({
+                ...shot,
+                sourceImage: await resolveSeedance2ReferenceTransportValue(
+                  shot.sourceImage,
+                  imageToDataUrl,
+                ),
+              })),
+            );
+            const content: ChatCompletionMessage["content"] = [
+              { type: "text", text: request.contentText },
+              ...transportShots.flatMap((shot) => {
+                const imageParts: Array<
+                  { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }
+                > = [
+                  {
+                    type: "text",
+                    text: `上游分镜图片 ${shot.shotId}（第 ${shot.shotIndex} 镜，${shot.title}）`,
+                  },
+                ];
+                if (shot.sourceImage) {
+                  imageParts.push({
+                    type: "image_url",
+                    image_url: { url: shot.sourceImage },
+                  });
+                }
+                return imageParts;
+              }),
+            ];
+            return (
+              (await requestImageQuestion(
+                {
+                  ...textConfig,
+                  textModel: request.model,
+                  model: request.model,
+                },
+                [{ role: "user", content }],
+                undefined,
+                { stream: false },
+              )) || ""
+            );
+          },
+        );
+        const built = buildVersionedStoryDirectorSlicePlaceholders({
+          workflowNode,
+          storyDirector,
+          nodes: nodesRef.current,
+          connections: connectionsRef.current,
+          rewrittenShots,
+          rewriteModel: promptTextModel,
+          rewriteTemplate,
+        });
+        run = {
+          fingerprint,
+          rewrittenShots,
+          built,
+          nextShotIndex: Math.min(...rewrittenShots.map((shot) => shot.shotIndex)),
+        };
+        seedance2RewriteRunCache.set(workflowNode.id, run);
+      }
+
+      const orderedCreatedNodes = [...run.built.createdNodes].sort(
+        (left, right) =>
+          Number(left.metadata?.seedanceStoryShotIndex || 0) -
+          Number(right.metadata?.seedanceStoryShotIndex || 0),
+      );
+      const sequential = createSeedance2SequentialPlaceholderRun({
+        rewrittenShots: orderedCreatedNodes.map((node) => ({
+          shotId: String(node.metadata?.seedanceStoryShotId || node.id),
+          shotIndex: Number(node.metadata?.seedanceStoryShotIndex || 0),
+          prompt: String(node.metadata?.prompt || ""),
+        })),
+        startShotIndex: run.nextShotIndex,
+        appendShot: (shot) => {
+          const node = orderedCreatedNodes.find(
+            (candidate) =>
+              Number(candidate.metadata?.seedanceStoryShotIndex || 0) === shot.shotIndex,
+          );
+          if (!node) throw new Error(`Seedance2 第 ${shot.shotIndex} 镜占位框不存在`);
+          if (nodesRef.current.some((candidate) => candidate.id === node.id)) return;
+          const nextNodes = [...nodesRef.current, node];
+          const nextConnections = [
+            ...connectionsRef.current,
+            ...run.built.createdConnections.filter((connection) => connection.toNodeId === node.id),
+          ];
+          nodesRef.current = nextNodes;
+          connectionsRef.current = nextConnections;
+          setNodes(nextNodes);
+          setConnections(nextConnections);
+          persistCanvasSnapshot(nextNodes, nextConnections);
+          run.nextShotIndex = shot.shotIndex + 1;
+        },
+      });
+      if (sequential.error) throw sequential.error;
+      seedance2RewriteRunCache.delete(workflowNode.id);
+      setSelectedNodeIds(new Set([workflowNode.id]));
+      setSelectedConnectionId(null);
+      message.success(`已创建 Seedance2 视频占位框 V${run.built.setVersion}`);
+    } catch (error) {
+      const errorDetails = error instanceof Error ? error.message : "Seedance2 整批提示词改写失败";
+      message.error(errorDetails);
+    } finally {
+      setRunningNodeId(null);
+    }
+    return;
   }, [effectiveConfig, message, openConfigDialog, persistCanvasSnapshot]);
 
   const deleteNodes = useCallback(
@@ -4867,8 +4839,183 @@ function InfiniteCanvasPage() {
     [],
   );
 
+  const regenerateSeedance2StoryPrompt = useCallback(
+    async (nodeId: string) => {
+      const placeholder = nodesRef.current.find((node) => node.id === nodeId);
+      if (
+        placeholder?.type !== CanvasNodeType.Video ||
+        placeholder.metadata?.seedanceWorkflowRole !== "placeholder"
+      ) return;
+
+      const workflowId = String(placeholder.metadata?.seedanceWorkflowNodeId || "").trim();
+      const workflowNode = nodesRef.current.find((node) => node.id === workflowId);
+      if (!workflowNode || workflowNode.type !== CanvasNodeType.Seedance2Workflow) {
+        message.error("\u672a\u627e\u5230\u5f53\u524d\u89c6\u9891\u8282\u70b9\u5bf9\u5e94\u7684 Seedance2 \u89c6\u9891\u5de5\u4f5c\u6d41");
+        return;
+      }
+      const storyDirectorId = String(
+        placeholder.metadata?.seedanceStoryDirectorNodeId || "",
+      ).trim();
+      const storyDirector = nodesRef.current.find(
+        (node) =>
+          node.id === storyDirectorId &&
+          node.type === CanvasNodeType.StoryDirector,
+      );
+      if (!storyDirector) {
+        message.error("\u672a\u627e\u5230\u5f53\u524d\u89c6\u9891\u8282\u70b9\u5173\u8054\u7684\u6545\u4e8b\u5bfc\u6f14");
+        return;
+      }
+
+      const promptTextModel = resolveSeedance2PromptTextModel(workflowNode, effectiveConfig);
+      const textConfig = {
+        ...buildGenerationConfig(effectiveConfig, workflowNode, "text"),
+        textModel: promptTextModel,
+        model: promptTextModel,
+      };
+      if (!isAiConfigReady(textConfig, promptTextModel)) {
+        openConfigDialog(true);
+        return;
+      }
+
+      const configuredTemplate = typeof workflowNode.metadata?.seedancePromptTemplate === "string"
+        ? workflowNode.metadata.seedancePromptTemplate.trim()
+        : "";
+      const rewriteTemplate = configuredTemplate || defaultSeedancePromptTemplate();
+      setRunningNodeId(nodeId);
+      try {
+        const rewriteInput = collectSeedance2StoryRewriteInput({
+          storyDirector,
+          nodes: nodesRef.current,
+          connections: connectionsRef.current,
+          template: rewriteTemplate,
+          shotId: placeholder.metadata?.seedanceStoryShotId,
+          shotIndex:
+            placeholder.metadata?.seedanceStoryShotIndex ||
+            placeholder.metadata?.seedanceShotIndex,
+        });
+        const resolvedSlots = resolveSeedance2ReferenceSlots({
+          placeholder,
+          nodes: nodesRef.current,
+          connections: connectionsRef.current,
+          visibleSlotCount: seedance2VisibleReferenceSlotCount({
+            width: placeholder.width,
+            height: placeholder.height,
+            boundSlotCount: seedance2ManualReferenceHighestSlotIndex(placeholder),
+            isExpanded: placeholder.metadata?.seedanceReferenceSlotsExpanded === true,
+            orientation: seedance2ReferenceSlotOrientation(placeholder),
+          }),
+        });
+        const referenceCandidates = seedance2ResolvedSlotsToCustomerReferences(resolvedSlots);
+        const selectedShot = rewriteInput.shots[0];
+        if (
+          selectedShot?.sourceImage &&
+          !referenceCandidates.some((reference) => reference.nodeId === selectedShot.sourceImageNodeId)
+        ) {
+          referenceCandidates.unshift({
+            label: "\u5f53\u524d\u5206\u955c\u56fe",
+            value: selectedShot.sourceImage,
+            nodeId: selectedShot.sourceImageNodeId,
+            useAs: "reference_image",
+          });
+        }
+        const promptReferences = await hydrateSeedance2CustomerReferencesForTransport(
+          referenceCandidates,
+          imageToDataUrl,
+        );
+        const referenceContext = promptReferences.map((reference) => {
+          const sourceNode = nodesRef.current.find((node) => node.id === reference.nodeId);
+          return {
+            label: reference.label,
+            nodeId: reference.nodeId,
+            useAs: reference.useAs,
+            sourceTitle: sourceNode?.title || "",
+            sourcePrompt:
+              typeof sourceNode?.metadata?.prompt === "string"
+                ? sourceNode.metadata.prompt
+                : "",
+          };
+        });
+        const [rewrittenShot] = await rewriteSeedance2BatchPrompts(
+          { ...rewriteInput, rewriteModel: promptTextModel },
+          async (request) => {
+            const content: ChatCompletionMessage["content"] = [
+              { type: "text", text: request.contentText },
+              {
+                type: "text",
+                text: `\u5f53\u524d\u89c6\u9891\u8282\u70b9\u7684\u5168\u90e8\u53c2\u8003\u56fe\u8d44\u6599\uff08\u5fc5\u987b\u4e0e\u89c6\u9891\u5de5\u4f5c\u6d41\u6a21\u677f\u4e00\u8d77\u4f7f\u7528\uff09\uff1a\n${JSON.stringify(referenceContext, null, 2)}`,
+              },
+              ...promptReferences.flatMap((reference) => [
+                {
+                  type: "text" as const,
+                  text: `\u89c6\u9891\u8282\u70b9\u53c2\u8003\u56fe\uff1a${reference.label}`,
+                },
+                {
+                  type: "image_url" as const,
+                  image_url: { url: reference.value },
+                },
+              ]),
+            ];
+            return (
+              (await requestImageQuestion(
+                {
+                  ...textConfig,
+                  textModel: request.model,
+                  model: request.model,
+                },
+                [{ role: "user", content }],
+                undefined,
+                { stream: false },
+              )) || ""
+            );
+          },
+        );
+        if (!rewrittenShot) throw new Error("\u89c6\u9891\u63d0\u793a\u8bcd\u91cd\u65b0\u751f\u6210\u672a\u8fd4\u56de\u7ed3\u679c");
+        setNodes((prev) =>
+          prev.map((node) =>
+            node.id === nodeId
+              ? {
+                  ...node,
+                  metadata: {
+                    ...node.metadata,
+                    prompt: rewrittenShot.prompt,
+                    seedanceAutoPrompt: rewrittenShot.prompt,
+                    seedancePromptEditedByUser: false,
+                    seedancePromptRewriteModel: promptTextModel,
+                    seedancePromptRewriteTemplate: rewriteTemplate,
+                    seedancePromptRewriteCreatedAt: new Date().toISOString(),
+                  },
+                }
+              : node,
+          ),
+        );
+        message.success("\u5df2\u6839\u636e\u89c6\u9891\u5de5\u4f5c\u6d41\u6a21\u677f\u91cd\u65b0\u751f\u6210\u63d0\u793a\u8bcd");
+      } catch (error) {
+        const details = error instanceof Error ? error.message : "\u89c6\u9891\u63d0\u793a\u8bcd\u91cd\u65b0\u751f\u6210\u5931\u8d25";
+        message.error(details);
+      } finally {
+        setRunningNodeId(null);
+      }
+    },
+    [effectiveConfig, message, openConfigDialog],
+  );
+
   const handleNodeMetadataChange = useCallback(
     (nodeId: string, patch: Partial<NonNullable<CanvasNodeData["metadata"]>>) => {
+      const node = nodesRef.current.find((candidate) => candidate.id === nodeId);
+      const requestsStoryPromptRegeneration =
+        node?.type === CanvasNodeType.Video &&
+        node.metadata?.seedanceWorkflowRole === "placeholder" &&
+        patch.seedancePromptEditedByUser === false &&
+        typeof patch.prompt === "string" &&
+        patch.prompt ===
+          (node.metadata?.seedanceAutoPrompt ||
+            node.metadata?.prompt ||
+            "");
+      if (requestsStoryPromptRegeneration) {
+        void regenerateSeedance2StoryPrompt(nodeId);
+        return;
+      }
+
       setNodes((prev) =>
         prev.map((node) => {
           if (node.id !== nodeId) return node;
@@ -4923,7 +5070,7 @@ function InfiniteCanvasPage() {
         }),
       );
     },
-    [],
+    [regenerateSeedance2StoryPrompt],
   );
 
   const toggleBatchExpanded = useCallback((nodeId: string) => {

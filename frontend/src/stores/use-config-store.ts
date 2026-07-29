@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
-import { localForageStorage } from "@/lib/localforage-storage";
+import { flushRecoverableConfig, recoverableConfigStorage } from "@/lib/config-state-storage";
 import { apiGet } from "@/services/api/request";
 import { buildApiUrl } from "@/services/api/url";
 import type { AdminPublicSettings } from "@/services/api/admin";
@@ -261,7 +261,7 @@ export const useConfigStore = create<ConfigStore>()(
         }),
         {
             name: CONFIG_STORE_KEY,
-            storage: createJSONStorage(() => localForageStorage),
+            storage: createJSONStorage(() => recoverableConfigStorage),
             partialize: (state) => ({ config: state.config, webdav: state.webdav }),
             merge: (persisted, current) => {
                 const persistedState = (persisted || {}) as Partial<ConfigStore>;
@@ -297,10 +297,16 @@ export const useConfigStore = create<ConfigStore>()(
                 };
             },
             onRehydrateStorage: (initialState) => (state, error) => {
-                // Zustand passes an undefined state when storage parsing or
-                // merging fails. Fall back to the in-memory defaults instead of
-                // leaving the entire application on its hydration loading page.
-                if (error) console.error("Failed to restore local configuration; using defaults.", error);
+                if (error) {
+                    // Never call a Zustand action here: every action is wrapped
+                    // by persist and would write the in-memory empty defaults
+                    // over the configuration that merely failed to load. Keep
+                    // the UI gated and retry the native store instead.
+                    console.error("Failed to restore local configuration; retrying without overwriting it.", error);
+                    scheduleConfigRehydrate();
+                    return;
+                }
+                clearConfigRehydrateRetry();
                 (state || initialState).setHydrated(true);
             },
         },
@@ -312,4 +318,27 @@ export function useEffectiveConfig() {
     const config = useConfigStore((state) => state.config);
     const modelChannel = useConfigStore((state) => state.publicSettings?.modelChannel || null);
     return useMemo(() => resolveEffectiveConfig(config, modelChannel), [config, modelChannel]);
+}
+let configRehydrateTimer: number | null = null;
+
+function scheduleConfigRehydrate() {
+    if (typeof window === "undefined" || configRehydrateTimer !== null) return;
+    configRehydrateTimer = window.setTimeout(() => {
+        configRehydrateTimer = null;
+        void useConfigStore.persist.rehydrate();
+    }, 1_000);
+}
+
+function clearConfigRehydrateRetry() {
+    if (typeof window === "undefined" || configRehydrateTimer === null) return;
+    window.clearTimeout(configRehydrateTimer);
+    configRehydrateTimer = null;
+}
+
+export async function flushConfigStore() {
+    const { config, webdav } = useConfigStore.getState();
+    await flushRecoverableConfig(
+        CONFIG_STORE_KEY,
+        JSON.stringify({ state: { config, webdav }, version: 0 }),
+    );
 }

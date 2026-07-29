@@ -10,6 +10,15 @@ const canvasClientSource = readFileSync(
   "utf8",
 );
 
+const storyIntegrationSource = readFileSync(
+  join(repoRoot, "src/app/canvas/utils/seedance2-story-integration.ts"),
+  "utf8",
+);
+const builderStart = storyIntegrationSource.indexOf("export function buildVersionedStoryDirectorSlicePlaceholders");
+const builderEnd = storyIntegrationSource.indexOf("function ", builderStart + "export function ".length);
+assert.ok(builderStart >= 0 && builderEnd > builderStart, "Story Director placeholder builder should be extractable");
+const builderSource = storyIntegrationSource.slice(builderStart, builderEnd);
+
 const panelStart = canvasClientSource.indexOf("function Seedance2WorkflowPanel");
 const panelEnd = canvasClientSource.indexOf("function InfiniteCanvasPage", panelStart);
 assert.ok(panelStart >= 0 && panelEnd > panelStart, "Seedance2WorkflowPanel source should be extractable");
@@ -53,7 +62,7 @@ assert.doesNotMatch(panelSource, /本地 Seedance2 API/, "Seedance2 workflow pan
 assert.doesNotMatch(panelSource, /配置全局默认参数，并批量生成视频占位框；生成时走本地 Seedance2 API。/, "Seedance2 workflow panel should not render the old global-default/API description");
 assert.match(panelSource, /label="\u6587\u672c\u6a21\u578b"/u, "Seedance2 workflow panel should keep the text model picker");
 assert.match(panelSource, /label="\u89c6\u9891\u6a21\u578b"/u, "Seedance2 workflow panel should keep the video model picker");
-assert.match(rebuildSource, /LOCAL_SEEDANCE2_API_ENDPOINT/, "Seedance2 placeholder rebuild should still keep the local API endpoint fallback internally");
+assert.match(builderSource, /LOCAL_SEEDANCE2_API_ENDPOINT/, "Story Director placeholder creation should keep the local API endpoint fallback internally");
 
 for (const label of [
   "\u5206\u955c\u6570\u91cf",
@@ -80,12 +89,12 @@ assert.doesNotMatch(panelSource, /label="\u8fde\u7eed\u751f\u6210"/u, "Seedance2
 assert.doesNotMatch(panelSource, /\u6bcf\u955c\u751f\u6210\u6570\u91cf/u, "Seedance2 workflow panel should not render per-shot generation count");
 assert.match(panelSource, /\u5206\u955c\u5f0f/u, "Seedance2 workflow panel should show its fixed storyboard mode");
 assert.match(panelSource, /seedanceRatioSelection:\s*"manual"/, "manual ratio changes should persist their provenance");
-assert.match(rebuildSource, /resolveSeedance2WorkflowRatio\(/, "placeholder rebuild should resolve the effective workflow ratio");
+assert.match(builderSource, /resolveSeedance2WorkflowRatio\(/, "Story Director placeholder creation should resolve the effective workflow ratio");
 assert.doesNotMatch(ratioOptionsSource, /adaptive/, "ratio picker should not offer an unsupported adaptive value");
-assert.match(rebuildSource, /mode:\s*"slice"/, "placeholder rebuild should always use storyboard mode");
-assert.match(rebuildSource, /generateCount:\s*1/, "placeholder rebuild should create one result per shot");
+assert.match(builderSource, /mode:\s*"slice"/, "Story Director placeholder creation should always use storyboard mode");
+assert.match(builderSource, /const generateCount = 1/, "Story Director placeholder creation should create one result per shot");
 assert.match(createSource, /mode:\s*"slice"/, "new workflows should be created in storyboard mode");
 assert.match(createSource, /duration:\s*"10"/, "new workflows should default to 10 seconds");
-assert.match(rebuildSource, /duration:\s*meta\.seedanceDuration \|\| meta\.seconds \|\| "10"/, "rebuild should retain the 10-second duration fallback");
+assert.match(builderSource, /normalizeSeedance2Duration\(workflowMetadata\.seedanceDuration \|\| workflowMetadata\.seconds\)/, "Story Director placeholder creation should normalize workflow duration with its default fallback");
 
 console.log("seedance2 workflow simplified ui tests passed");

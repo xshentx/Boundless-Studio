@@ -7,7 +7,7 @@ const desktopBackend = "http://127.0.0.1:34116";
 export default defineConfig({
   plugins: [react()],
   define: {
-    "process.env.NEXT_PUBLIC_APP_VERSION": JSON.stringify("1.0.9"),
+    "process.env.NEXT_PUBLIC_APP_VERSION": JSON.stringify("1.1.0"),
     "process.env.NEXT_PUBLIC_DOC_URL": JSON.stringify("https://docs.canvas.best"),
     "process.env.NEXT_PUBLIC_DEV_BACKEND": JSON.stringify(""),
   },

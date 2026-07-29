@@ -18,12 +18,25 @@ const handlerStart = canvasClientSource.indexOf("const rebuildSeedance2Placehold
 const handlerEnd = canvasClientSource.indexOf("const deleteNodes", handlerStart);
 assert.ok(handlerStart >= 0 && handlerEnd > handlerStart);
 const handlerSource = canvasClientSource.slice(handlerStart, handlerEnd);
-const fallbackStart = handlerSource.indexOf("const existingPlaceholderIds");
-assert.ok(fallbackStart > 0, "the non-story placeholder fallback should remain available");
-const storyBranchSource = handlerSource.slice(0, fallbackStart);
+assert.doesNotMatch(
+  handlerSource,
+  /const existingPlaceholderIds|buildSeedance2WorkflowNodes\(\{[\s\S]*?shotCount:/,
+  "placeholder creation must not fall back to empty prompts without Story Director context",
+);
+assert.match(
+  handlerSource,
+  /if \(!storyDirector\) \{[\s\S]*?message\.error[\s\S]*?return;/,
+  "placeholder creation must require a linked Story Director",
+);
+assert.match(
+  handlerSource,
+  /storyShotCount <= 0[\s\S]*?message\.error[\s\S]*?return;/,
+  "placeholder creation must require Story Director shots",
+);
+const storyBranchSource = handlerSource;
 
 assert.doesNotMatch(
-  handlerSource.slice(0, fallbackStart),
+  handlerSource,
   /meta\.seedanceWorkflowMode\s*===\s*"slice"/,
   "Story Director rewrite should not depend on legacy workflow mode metadata",
 );
@@ -37,6 +50,16 @@ assert.match(
   canvasClientSource,
   /collectSeedance2StoryRewriteInput/,
   "canvas should collect the current full story, storyboard prompts and template",
+);
+assert.match(
+  panelSource,
+  /\u6545\u4e8b\u5bfc\u6f14/,
+  "the creation UI should explain that Story Director content participates in every prompt",
+);
+assert.match(
+  storyBranchSource,
+  /template:\s*rewriteTemplate/,
+  "every placeholder prompt rewrite must use the video workflow prompt template",
 );
 assert.match(
   canvasClientSource,
@@ -81,6 +104,11 @@ assert.match(
 );
 assert.match(
   storyBranchSource,
+  /resolveSeedance2ReferenceTransportValue\([\s\S]*shot\.sourceImage,[\s\S]*imageToDataUrl[\s\S]*transportShots\.flatMap/,
+  "restored local storyboard image handles must be hydrated before batch prompt submission",
+);
+assert.match(
+  storyBranchSource,
   /createSeedance2SequentialPlaceholderRun/,
   "validated rewritten shots must be appended in story order",
 );
@@ -122,8 +150,8 @@ assert.match(
 );
 assert.match(
   panelSource,
-  /disabled=\{isCreatingPlaceholders\}/,
-  "the UI button should prevent duplicate human clicks while a batch rewrite is running",
+  /disabled=\{isCreatingPlaceholders \|\| !storyDirectorSource\}/,
+  "the UI button should require Story Director context and prevent duplicate clicks while rewriting",
 );
 
 for (const field of [
