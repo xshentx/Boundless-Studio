@@ -43,7 +43,7 @@ assert.ok(
 );
 assert.match(
   canvasClientSource,
-  /const rewriteTemplate = configuredTemplate \|\| defaultSeedancePromptTemplate\(\)/,
+  /const rewriteTemplate =\s*configuredTemplate\s*\|\|\s*defaultSeedancePromptTemplate\(\)/,
   "an empty workflow template should fall back to the standard video prompt template",
 );
 

@@ -3,11 +3,12 @@ import axios from "axios";
 import { desktopApiUrl } from "@/services/desktop-api-url";
 
 import { dataUrlToFile } from "@/lib/image-utils";
+import { customerVideoResponseFailure, extractUpstreamError } from "@/app/canvas/utils/customer-video-task";
 import { resolveApiRequestRoute, routedLocalApiUrl, routedLocalHeaders, type ApiRequestRoute } from "@/services/api/ai-routing";
 import { getMediaBlob, uploadMediaFile, type UploadedFile } from "@/services/file-storage";
 import { imageToDataUrl } from "@/services/image-storage";
 import { boolConfig, buildSeedancePromptText, isSeedanceVideoConfig, normalizeSeedanceDuration, normalizeSeedanceRatio, normalizeSeedanceResolution, seedanceVideoReferenceError, SEEDANCE_REFERENCE_LIMITS } from "@/lib/seedance-video";
-import type { ApiBoardRouteKey } from "@/stores/api-relay-config";
+import { ensureApiRelaySettings, type ApiBoardRouteKey } from "@/stores/api-relay-config";
 import { type AiConfig } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
 import { getStoredAuthKey } from "@/store/auth";
@@ -45,19 +46,32 @@ type ApiEnvelope<T> = T | { code?: number; data?: T | null; msg?: string };
 type ReferenceMediaUploadResponse = { id: string; url: string; mimeType: string; bytes: number };
 
 export type VideoGenerationResult = { blob?: Blob; url?: string; mimeType?: string };
-export type VideoGenerationTask = { id: string; provider: "openai" | "seedance"; model: string; route?: ApiRequestRoute };
+export type VideoGenerationTask = {
+    id: string;
+    provider: "openai" | "seedance";
+    model: string;
+    route?: ApiRequestRoute;
+    boardRouteKey?: ApiBoardRouteKey;
+    routeProviderId?: string;
+};
 export type VideoGenerationTaskState = { status: "pending" } | { status: "completed"; result: VideoGenerationResult } | { status: "failed"; error: string };
 
 function aiApiUrl(config: AiConfig, route: ApiRequestRoute, path: string) {
     return route.mode === "local" ? routedLocalApiUrl(route, path) : `/api/v1${path}`;
 }
 
-async function aiHeaders(config: AiConfig, route: ApiRequestRoute, contentType?: string) {
-    if (route.mode === "local") return routedLocalHeaders(route, contentType);
+async function aiHeaders(config: AiConfig, route: ApiRequestRoute, contentType?: string, idempotencyKey?: string) {
+    if (route.mode === "local") {
+        return {
+            ...routedLocalHeaders(route, contentType),
+            ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
+        };
+    }
     const token = (await getStoredAuthKey()) || useUserStore.getState().token;
     return {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(contentType ? { "Content-Type": contentType } : {}),
+        ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
     };
 }
 
@@ -65,8 +79,12 @@ function refreshRemoteUser(config: AiConfig) {
     if (config.channelMode === "remote") void useUserStore.getState().hydrateUser();
 }
 
-export async function requestVideoGeneration(config: AiConfig, prompt: string, references: ReferenceImage[] = [], videoReferences: ReferenceVideo[] = [], audioReferences: ReferenceAudio[] = [], boardRouteKey?: ApiBoardRouteKey): Promise<VideoGenerationResult> {
-    const task = await createVideoGenerationTask(config, prompt, references, videoReferences, audioReferences, boardRouteKey);
+export async function requestVideoGeneration(config: AiConfig, prompt: string, references: ReferenceImage[] = [], videoReferences: ReferenceVideo[] = [], audioReferences: ReferenceAudio[] = [], boardRouteKey?: ApiBoardRouteKey, idempotencyKey?: string): Promise<VideoGenerationResult> {
+    const task = await createVideoGenerationTask(config, prompt, references, videoReferences, audioReferences, boardRouteKey, idempotencyKey);
+    return waitForVideoGenerationTask(config, task);
+}
+
+export async function waitForVideoGenerationTask(config: AiConfig, task: VideoGenerationTask): Promise<VideoGenerationResult> {
     const delayMs = task.provider === "seedance" ? 5000 : 2500;
     for (let attempt = 0; attempt < 120; attempt += 1) {
         const state = await pollVideoGenerationTask(config, task);
@@ -78,23 +96,42 @@ export async function requestVideoGeneration(config: AiConfig, prompt: string, r
     throw new Error("视频生成超时，请稍后重试");
 }
 
-export async function createVideoGenerationTask(config: AiConfig, prompt: string, references: ReferenceImage[] = [], videoReferences: ReferenceVideo[] = [], audioReferences: ReferenceAudio[] = [], boardRouteKey?: ApiBoardRouteKey): Promise<VideoGenerationTask> {
+export async function createVideoGenerationTask(config: AiConfig, prompt: string, references: ReferenceImage[] = [], videoReferences: ReferenceVideo[] = [], audioReferences: ReferenceAudio[] = [], boardRouteKey?: ApiBoardRouteKey, idempotencyKey?: string): Promise<VideoGenerationTask> {
     const route = resolveApiRequestRoute(config, "video", config.model || config.videoModel, boardRouteKey);
     const model = route.model.trim();
     assertVideoConfig(config, model);
-    if (isSeedanceVideoConfig({ ...config, model })) {
-        return createSeedanceTask(config, route, model, prompt, references, videoReferences, audioReferences);
-    }
-    if (videoReferences.length || audioReferences.length) {
-        throw new Error("当前视频接口不支持参考视频或参考音频，请切换到 Seedance 2.0 / 火山 Agent Plan 模型，或移除参考素材");
-    }
-    return createOpenAIVideoTask(config, route, model, prompt, references);
+    const task = isSeedanceVideoConfig({ ...config, model })
+        ? await createSeedanceTask(config, route, model, prompt, references, videoReferences, audioReferences, idempotencyKey)
+        : await createOpenAIVideoTaskWithReferenceValidation(config, route, model, prompt, references, videoReferences, audioReferences, idempotencyKey);
+    return {
+        ...task,
+        boardRouteKey,
+        routeProviderId: route.mode === "local" ? route.provider.id : undefined,
+    };
 }
 
 export async function pollVideoGenerationTask(config: AiConfig, task: VideoGenerationTask): Promise<VideoGenerationTaskState> {
     assertVideoConfig(config, task.model);
-    const route = task.route || resolveApiRequestRoute(config, "video", task.model);
+    const route = resolveVideoGenerationTaskRoute(config, task);
     return task.provider === "seedance" ? pollSeedanceTask(config, route, task) : pollOpenAIVideoTask(config, route, task);
+}
+
+function resolveVideoGenerationTaskRoute(config: AiConfig, task: VideoGenerationTask): ApiRequestRoute {
+    if (task.route) return task.route;
+    if (task.routeProviderId) {
+        const normalized = ensureApiRelaySettings({ ...config, channelMode: "local" });
+        const provider = normalized.apiRelays.find((item) => item.id === task.routeProviderId);
+        if (provider?.baseUrl.trim() && provider.apiKey.trim()) {
+            return {
+                mode: "local",
+                capability: "video",
+                model: task.model,
+                provider,
+                timeoutMs: provider.timeoutMs || normalized.apiRelayAdvanced.defaultTimeoutMs || 360_000,
+            };
+        }
+    }
+    return resolveApiRequestRoute(config, "video", task.model, task.boardRouteKey);
 }
 
 export async function storeGeneratedVideo(result: VideoGenerationResult): Promise<UploadedFile> {
@@ -103,8 +140,24 @@ export async function storeGeneratedVideo(result: VideoGenerationResult): Promis
     throw new Error("视频接口没有返回可播放的视频");
 }
 
-async function createOpenAIVideoTask(config: AiConfig, route: ApiRequestRoute, model: string, prompt: string, references: ReferenceImage[]): Promise<VideoGenerationTask> {
-    if (route.mode === "remote") return createRelayVideoTask(config, route, model, prompt, references);
+async function createOpenAIVideoTaskWithReferenceValidation(
+    config: AiConfig,
+    route: ApiRequestRoute,
+    model: string,
+    prompt: string,
+    references: ReferenceImage[],
+    videoReferences: ReferenceVideo[],
+    audioReferences: ReferenceAudio[],
+    idempotencyKey?: string,
+) {
+    if (videoReferences.length || audioReferences.length) {
+        throw new Error("当前视频接口不支持参考视频或参考音频，请切换到 Seedance 2.0 / 火山 Agent Plan 模型，或移除参考素材");
+    }
+    return createOpenAIVideoTask(config, route, model, prompt, references, idempotencyKey);
+}
+
+async function createOpenAIVideoTask(config: AiConfig, route: ApiRequestRoute, model: string, prompt: string, references: ReferenceImage[], idempotencyKey?: string): Promise<VideoGenerationTask> {
+    if (route.mode === "remote") return createRelayVideoTask(config, route, model, prompt, references, idempotencyKey);
 
     const body = new FormData();
     body.append("model", model);
@@ -116,7 +169,7 @@ async function createOpenAIVideoTask(config: AiConfig, route: ApiRequestRoute, m
     const files = await Promise.all(references.slice(0, 7).map(async (image) => dataUrlToFile({ ...image, dataUrl: await imageToDataUrl(image) })));
     files.forEach((file) => body.append("input_reference[]", file));
     try {
-        const created = unwrapVideoResponse((await axios.post<ApiVideoResponse>(aiApiUrl(config, route, "/videos"), body, { headers: await aiHeaders(config, route), timeout: route.timeoutMs })).data);
+        const created = unwrapVideoResponse((await axios.post<ApiVideoResponse>(aiApiUrl(config, route, "/videos"), body, { headers: await aiHeaders(config, route, undefined, idempotencyKey), timeout: route.timeoutMs })).data);
         if (!created.id) throw new Error("视频接口没有返回任务 ID");
         return { id: created.id, provider: "openai", model, route };
     } catch (error) {
@@ -133,14 +186,14 @@ async function pollOpenAIVideoTask(config: AiConfig, route: ApiRequestRoute, tas
             refreshRemoteUser(config);
             return { status: "completed", result: { blob: content.data } };
         }
-        if (video.status === "failed" || video.status === "cancelled") return { status: "failed", error: video.error?.message || "视频生成失败" };
+        if (video.status === "failed" || video.status === "cancelled") return { status: "failed", error: readErrorValue(video) || "视频生成失败" };
         return { status: "pending" };
     } catch (error) {
         throw new Error(readAxiosError(error, "视频任务查询失败"));
     }
 }
 
-async function createSeedanceTask(config: AiConfig, route: ApiRequestRoute, model: string, prompt: string, references: ReferenceImage[], videoReferences: ReferenceVideo[], audioReferences: ReferenceAudio[]): Promise<VideoGenerationTask> {
+async function createSeedanceTask(config: AiConfig, route: ApiRequestRoute, model: string, prompt: string, references: ReferenceImage[], videoReferences: ReferenceVideo[], audioReferences: ReferenceAudio[], idempotencyKey?: string): Promise<VideoGenerationTask> {
     if (audioReferences.length && !references.length && !videoReferences.length) {
         throw new Error("Seedance 参考音频不能单独使用，请同时添加参考图或参考视频");
     }
@@ -150,7 +203,7 @@ async function createSeedanceTask(config: AiConfig, route: ApiRequestRoute, mode
         if (videoReferences.length || audioReferences.length) {
             throw new Error("当前中转视频接口暂不支持参考视频或参考音频，请先使用参考图片生成");
         }
-        return createRelayVideoTask(config, route, model, prompt, references);
+        return createRelayVideoTask(config, route, model, prompt, references, idempotencyKey);
     }
 
     const content = await buildSeedanceContent(config, prompt, references, videoReferences, audioReferences);
@@ -166,7 +219,7 @@ async function createSeedanceTask(config: AiConfig, route: ApiRequestRoute, mode
     };
 
     try {
-        const created = unwrapSeedanceTask((await axios.post<ApiEnvelope<SeedanceTask>>(seedanceApiUrl(config, route), payload, { headers: await aiHeaders(config, route, "application/json"), timeout: route.timeoutMs })).data);
+        const created = unwrapSeedanceTask((await axios.post<ApiEnvelope<SeedanceTask>>(seedanceApiUrl(config, route), payload, { headers: await aiHeaders(config, route, "application/json", idempotencyKey), timeout: route.timeoutMs })).data);
         if (!created.id) throw new Error("Seedance 接口没有返回任务 ID");
         return { id: created.id, provider: "seedance", model, route };
     } catch (error) {
@@ -185,23 +238,24 @@ async function pollSeedanceTask(config: AiConfig, route: ApiRequestRoute, task: 
             refreshRemoteUser(config);
             return { status: "completed", result: await videoResultFromUrl(url) };
         }
-        if (state.status === "failed" || state.status === "cancelled" || state.status === "expired") return { status: "failed", error: state.error?.message || `Seedance 视频生成${state.status === "expired" ? "超时" : "失败"}` };
+        if (state.status === "failed" || state.status === "cancelled" || state.status === "expired") return { status: "failed", error: readErrorValue(state) || `Seedance 视频生成${state.status === "expired" ? "超时" : "失败"}` };
         return { status: "pending" };
     } catch (error) {
         throw new Error(readAxiosError(error, "Seedance 任务查询失败"));
     }
 }
 
-async function createRelayVideoTask(config: AiConfig, route: ApiRequestRoute, model: string, prompt: string, references: ReferenceImage[]): Promise<VideoGenerationTask> {
+async function createRelayVideoTask(config: AiConfig, route: ApiRequestRoute, model: string, prompt: string, references: ReferenceImage[], idempotencyKey?: string): Promise<VideoGenerationTask> {
     const payload = await buildRelayVideoPayload(config, model, prompt, references);
     const requestUrl = aiApiUrl(config, route, "/videos/generations");
     try {
-        const response = await axios.post<RelayVideoResponse>(requestUrl, payload, { headers: await aiHeaders(config, route, "application/json"), timeout: route.timeoutMs });
+        const response = await axios.post<RelayVideoResponse>(requestUrl, payload, { headers: await aiHeaders(config, route, "application/json", idempotencyKey), timeout: route.timeoutMs });
         const data = response.data;
-        if (!data || data.success === false) throw new Error(readErrorValue(data) || "视频任务创建失败");
+        const responseFailure = customerVideoResponseFailure(data);
+        if (!data || responseFailure) throw new Error(responseFailure || readErrorValue(data) || "视频任务创建失败");
         const relayTask = data.task || data;
         const taskId = data.task_id || relayTask.task_id || data.id || relayTask.id;
-        if (!taskId) throw new Error("视频接口没有返回任务 ID");
+        if (!taskId) throw new Error(readErrorValue(data) || "视频接口没有返回任务 ID");
         return { id: taskId, provider: "seedance", model, route };
     } catch (error) {
         throw new Error(readAxiosError(error, "视频任务创建失败"));
@@ -213,14 +267,16 @@ async function pollRelayVideoTask(config: AiConfig, route: ApiRequestRoute, task
     try {
         const response = await axios.get<RelayVideoResponse>(requestUrl, { headers: await aiHeaders(config, route), timeout: route.timeoutMs });
         const data = response.data;
-        if (!data || data.success === false) throw new Error(readErrorValue(data) || "视频任务查询失败");
+        const responseFailure = customerVideoResponseFailure(data);
+        if (!data || responseFailure) throw new Error(responseFailure || readErrorValue(data) || "视频任务查询失败");
         return relayVideoTaskState(config, data.task || data);
     } catch (error) {
         if (isRelayVideoEndpointMissing(error)) {
             try {
                 const response = await axios.get<RelayVideoResponse>(relayVideoTaskListUrl(config, route), { headers: await aiHeaders(config, route), timeout: route.timeoutMs });
                 const data = response.data;
-                if (!data || data.success === false) throw new Error(readErrorValue(data) || "视频任务查询失败");
+                const responseFailure = customerVideoResponseFailure(data);
+                if (!data || responseFailure) throw new Error(responseFailure || readErrorValue(data) || "视频任务查询失败");
                 const relayTask = findRelayVideoTaskById(data, task.id);
                 return relayTask ? relayVideoTaskState(config, relayTask) : { status: "pending" };
             } catch (listError) {
@@ -399,13 +455,25 @@ async function uploadReferenceMedia(file: File) {
 }
 
 async function videoResultFromUrl(url: string): Promise<VideoGenerationResult> {
+    let blob: Blob;
     try {
         const response = await axios.get<Blob>(url, { responseType: "blob" });
-        await assertVideoBlob(response.data);
-        return { blob: response.data };
-    } catch {
+        blob = response.data;
+    } catch (error) {
+        if (!axios.isAxiosError(error) || error.response) {
+            const responseBlob = axios.isAxiosError(error) && error.response?.data instanceof Blob
+                ? error.response.data
+                : undefined;
+            if (responseBlob) await assertVideoBlob(responseBlob);
+            throw new Error(readAxiosError(error, "视频下载失败"));
+        }
+        // Browsers can reject cross-origin downloads even though the video URL
+        // itself remains playable. Only that response-less network/CORS case may
+        // safely fall back to the original URL.
         return { url, mimeType: "video/mp4" };
     }
+    await assertVideoBlob(blob);
+    return { blob };
 }
 
 function assertVideoConfig(config: AiConfig, model: string) {
@@ -441,21 +509,19 @@ function unwrapSeedanceTask(payload: ApiEnvelope<SeedanceTask>) {
 
 function unwrapEnvelope<T>(payload: ApiEnvelope<T>, emptyMessage: string): T {
     if (!payload) throw new Error(emptyMessage);
-    if (typeof payload === "object" && "code" in payload && typeof payload.code === "number") {
-        if (payload.code !== 0) throw new Error(payload.msg || "请求失败");
-        if (!payload.data) throw new Error(emptyMessage);
-        return payload.data;
+    if (typeof payload === "object" && "code" in payload) {
+        const failure = customerVideoResponseFailure(payload);
+        if (failure) throw new Error(failure);
+        if ("data" in payload) {
+            if (!payload.data) throw new Error(emptyMessage);
+            return payload.data;
+        }
     }
     return payload as T;
 }
 
 function readErrorValue(value: unknown): string {
-    if (typeof value === "string") return value;
-    if (!value || typeof value !== "object") return "";
-    const item = value as { error?: unknown; message?: unknown; detail?: unknown; msg?: unknown };
-    if (typeof item.msg === "string") return item.msg;
-    if (typeof item.message === "string") return item.message;
-    return readErrorValue(item.error) || readErrorValue(item.detail);
+    return extractUpstreamError(value);
 }
 
 function readAxiosError(error: unknown, fallback: string) {
@@ -473,15 +539,21 @@ function statusMessage(status: number | undefined, fallback: string) {
 }
 
 async function assertVideoBlob(blob: Blob) {
-    if (!blob.type.includes("json")) return;
-    let payload: { code?: number; msg?: string; error?: { message?: string } };
+    if (!blob.type.toLowerCase().includes("json")) return;
+    let payload: Record<string, unknown>;
     try {
-        payload = JSON.parse(await blob.text()) as { code?: number; msg?: string; error?: { message?: string } };
+        payload = JSON.parse(await blob.text()) as Record<string, unknown>;
     } catch {
-        return;
+        throw new Error("视频下载接口返回了无效 JSON，未返回视频文件");
     }
-    if (typeof payload.code === "number" && payload.code !== 0) throw new Error(payload.msg || "视频下载失败");
-    if (payload.error?.message) throw new Error(payload.error.message);
+    const responseFailure = customerVideoResponseFailure(payload);
+    if (responseFailure) throw new Error(responseFailure);
+    const { code: _successCode, success: _success, ...errorPayload } = payload;
+    const upstreamError = extractUpstreamError(errorPayload);
+    if (upstreamError && !/^(?:ok|success|succeeded)$/i.test(upstreamError.trim())) {
+        throw new Error(upstreamError);
+    }
+    throw new Error("视频下载接口返回了 JSON，未返回视频文件");
 }
 
 function isPublicMediaUrl(value: string) {

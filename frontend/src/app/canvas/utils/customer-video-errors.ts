@@ -6,7 +6,7 @@ export type CustomerVideoErrorContext = {
 };
 
 export function formatCustomerVideoRequestError(error: unknown, context: CustomerVideoErrorContext) {
-  const message = error instanceof Error ? error.message : String(error || "");
+  const message = requestErrorMessage(error);
   const target = formatCustomerVideoTarget(context.baseUrl);
   const actionText = context.action === "poll" ? "查询" : "提交";
 
@@ -24,7 +24,18 @@ export function formatCustomerVideoRequestError(error: unknown, context: Custome
     return `视频任务查询失败：接口返回 ${queryStatus[1]}。请检查任务接口路径和视频中转服务。${target}`;
   }
 
-  return message || `视频任务${actionText}失败。${target}`;
+  if (!message) return `视频任务${actionText}失败。${target}`;
+  if (/^视频(?:任务|生成|接口)/.test(message)) return message;
+  return `视频任务${actionText}失败：${message}`;
+}
+
+function requestErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string") return message;
+  }
+  return String(error || "");
 }
 
 function isFetchNetworkError(message: string) {

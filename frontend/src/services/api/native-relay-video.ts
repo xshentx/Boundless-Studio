@@ -8,6 +8,7 @@ export type NativeRelayVideoRequest = {
   apiKey?: string;
   path: string;
   body?: string;
+  idempotencyKey?: string;
 };
 
 export type NativeRelayVideoResult<T> = {
@@ -31,6 +32,7 @@ export async function requestNativeRelayVideo<T>(request: NativeRelayVideoReques
     request.apiKey || "",
     request.path,
     request.body || "",
+    request.idempotencyKey || "",
   );
   if (response.message) {
     throw new Error(response.message);
@@ -47,7 +49,7 @@ export async function requestNativeRelayVideo<T>(request: NativeRelayVideoReques
     if (ok) {
       throw new Error(`Video relay returned invalid JSON (HTTP ${response.status})`);
     }
-    data = {} as T;
+    data = { detail: response.body } as T;
   }
   return {
     ok,

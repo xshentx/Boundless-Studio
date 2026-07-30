@@ -27,7 +27,7 @@ assert.match(
 );
 assert.match(
   source,
-  /const directSource = seedance2FaceEditFallbackSource\(seedance2FaceEditNode\.metadata\)/,
+  /const directSource = seedance2FaceEditFallbackSource\(\s*seedance2FaceEditNode\.metadata,?\s*\)/,
   "Seedance2 face edit should use the fallback source helper before opening the editor",
 );
 

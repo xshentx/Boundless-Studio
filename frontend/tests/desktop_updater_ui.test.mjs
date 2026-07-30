@@ -10,10 +10,19 @@ const service = read("src/services/desktop-updater.ts");
 assert.match(service, /CheckForUpdates[\s\S]*GetClientConfig[\s\S]*GetUpdateState[\s\S]*SetAutoCheckUpdates[\s\S]*StartUpdate/u);
 assert.match(service, /boundless:update-state/u, "the frontend must subscribe to backend progress events");
 assert.match(service, /autoCheckUpdates/u, "the persisted startup check setting must be loaded");
+assert.match(service, /autoCheckUpdates:\s*true/u, "automatic update checks must default to enabled outside the desktop bridge too");
 
 const panel = read("src/components/update-settings-panel.tsx");
 assert.match(panel, /启动时自动检测更新/u);
 assert.match(panel, /每次启动客户端都会检查最新 Release/u);
+assert.match(panel, /useState\(true\)/u, "the switch must render enabled before persisted settings finish loading");
+assert.match(
+    panel,
+    /inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0\.5/u,
+    "the switch thumb must be laid out from a stable flex origin",
+);
+assert.match(panel, /autoCheck \? "translate-x-5" : "translate-x-0"/u, "the thumb must stay inside the 44px track in both states");
+assert.doesNotMatch(panel, /absolute top-0\.5/u, "the switch thumb must not depend on an unspecified absolute left position");
 assert.match(panel, /立即检查/u);
 assert.match(panel, /下载并安装/u);
 assert.match(panel, /state\.progress[\s\S]*width:\s*`\$\{state\.progress\}%`/u, "download progress must be visible");

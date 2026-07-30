@@ -4,8 +4,15 @@ export type CustomerVideoTask = {
   status?: string;
   result?: string;
   message?: string;
+  msg?: string;
+  detail?: unknown;
+  reason?: unknown;
+  error_message?: string;
+  errorMessage?: string;
+  failure_reason?: unknown;
   failure_reason_short?: string;
   postprocess_last_error?: string;
+  data?: unknown;
   files?: string[];
   file_urls?: string[];
   watermark_removed?: boolean;
@@ -13,8 +20,82 @@ export type CustomerVideoTask = {
     video_url?: string;
     last_frame_url?: string;
   } | null;
-  error?: string | { message?: string; code?: string } | null;
+  error?: unknown;
 };
+
+const UPSTREAM_ERROR_KEYS = [
+  "postprocess_last_error",
+  "error_message",
+  "errorMessage",
+  "failure_reason",
+  "reason",
+  "upstream_error",
+  "upstreamError",
+  "cause",
+  "error",
+  "detail",
+  "errors",
+  "message",
+  "msg",
+  "failure_reason_short",
+  "data",
+  "response",
+  "body",
+  "task",
+  "tasks",
+  "result",
+  "code",
+] as const;
+
+/**
+ * Extracts the most actionable provider error from differently shaped upstream
+ * responses. A generic top-level "failed" message must not hide a more useful
+ * nested detail returned by the video provider.
+ */
+export function extractUpstreamError(value: unknown) {
+  const candidates: string[] = [];
+  collectUpstreamErrorCandidates(value, candidates, new WeakSet<object>(), 0);
+  return (
+    candidates.find(
+      (candidate) =>
+        !isGenericUpstreamFailure(candidate) && !isLikelyCustomerVideoUrl(candidate),
+    ) ||
+    candidates.find((candidate) => !isLikelyCustomerVideoUrl(candidate)) ||
+    ""
+  );
+}
+
+const CUSTOMER_VIDEO_FAILURE_STATUSES = new Set([
+  "failed",
+  "failure",
+  "error",
+  "canceled",
+  "cancelled",
+  "expired",
+]);
+
+export function isCustomerVideoTaskFailed(task: CustomerVideoTask | undefined) {
+  return CUSTOMER_VIDEO_FAILURE_STATUSES.has(
+    String(task?.status || "").trim().toLowerCase(),
+  );
+}
+
+export function customerVideoResponseFailure(value: unknown) {
+  if (!value || typeof value !== "object") return "";
+  const response = value as { success?: unknown; code?: unknown };
+  if (response.success === false) {
+    return extractUpstreamError(value) || "Video request failed";
+  }
+  const code = String(response.code ?? "").trim().toLowerCase();
+  const numericCode = /^\d+$/.test(code) ? Number(code) : Number.NaN;
+  const isSuccessfulCode =
+    ["0", "ok", "success", "succeeded"].includes(code) ||
+    (Number.isFinite(numericCode) && numericCode >= 200 && numericCode < 300);
+  if (code && !isSuccessfulCode) {
+    return extractUpstreamError(value) || code;
+  }
+  return "";
+}
 
 export function customerVideoTaskFileUrls(
   task: CustomerVideoTask | undefined,
@@ -44,20 +125,11 @@ export function isCustomerVideoTaskReady(
 }
 
 export function customerVideoTaskError(task: CustomerVideoTask | undefined) {
-  const candidates = [
-    task?.postprocess_last_error,
-    errorMessage(task?.error),
-    task?.message,
-    task?.result,
-    task?.failure_reason_short,
-  ];
-  const detail = candidates.find((value) => !isGenericCustomerVideoFailure(value));
-  return formatCustomerVideoTaskError(detail || candidates.find(Boolean));
+  return formatCustomerVideoTaskError(extractUpstreamError(task));
 }
 
 function isGenericCustomerVideoFailure(value: unknown) {
-  const normalized = String(value || "").trim().toLowerCase();
-  return !normalized || ["生成失败", "视频生成失败", "failed", "generation failed"].includes(normalized);
+  return isGenericUpstreamFailure(String(value || ""));
 }
 
 function formatCustomerVideoTaskError(value: unknown) {
@@ -110,7 +182,66 @@ function videoResultUrl(value: unknown) {
   return "";
 }
 
-function errorMessage(value: CustomerVideoTask["error"]) {
-  if (typeof value === "string") return value;
-  return value?.message || "";
+function collectUpstreamErrorCandidates(
+  value: unknown,
+  candidates: string[],
+  seen: WeakSet<object>,
+  depth: number,
+) {
+  if (depth > 8 || value == null) return;
+  if (typeof value === "string") {
+    const text = value.trim();
+    if (!text) return;
+    const parsed = parseUpstreamErrorJson(text);
+    if (parsed !== undefined) {
+      const previousLength = candidates.length;
+      collectUpstreamErrorCandidates(parsed, candidates, seen, depth + 1);
+      if (candidates.length > previousLength) return;
+    }
+    candidates.push(text);
+    return;
+  }
+  if (typeof value === "number" || typeof value === "bigint") {
+    candidates.push(String(value));
+    return;
+  }
+  if (typeof value !== "object" || seen.has(value)) return;
+  seen.add(value);
+  if (Array.isArray(value)) {
+    value.forEach((item) =>
+      collectUpstreamErrorCandidates(item, candidates, seen, depth + 1),
+    );
+    return;
+  }
+  const record = value as Record<string, unknown>;
+  for (const key of UPSTREAM_ERROR_KEYS) {
+    if (!(key in record)) continue;
+    collectUpstreamErrorCandidates(record[key], candidates, seen, depth + 1);
+  }
+}
+
+function parseUpstreamErrorJson(value: string) {
+  if (!/^[\[{]/.test(value)) return undefined;
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+function isGenericUpstreamFailure(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return true;
+  return /^(?:生成失败|视频生成失败|请求失败|任务失败|视频任务失败|failed|failure|error|generation failed|video generation failed|request failed|task failed|unknown error|internal server error)[.!。！]?$/.test(
+    normalized,
+  );
+}
+
+function isLikelyCustomerVideoUrl(value: string) {
+  const raw = value.trim();
+  return (
+    /^(?:https?:|blob:|asset:\/\/)/i.test(raw) ||
+    /^\/(?!\/)/.test(raw) ||
+    /\.(?:mp4|mov|webm|m3u8)(?:\?|#|$)/i.test(raw)
+  );
 }

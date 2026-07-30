@@ -142,13 +142,13 @@ assert.equal(
     directRegenerationSource.match(/reconcileStoryDirectorImageResults\(/g) ||
     []
   ).length,
-  4,
-  "direct regeneration validation, pending, success, and failure snapshots must reconcile the director",
+  5,
+  "direct regeneration validation, pending, success, per-task failure, and batch failure snapshots must reconcile the director",
 );
 assert.match(
   directRegenerationSource,
-  /targetIds\.has\(node\.id\) &&\s*node\.metadata\?\.status === NODE_STATUS_LOADING &&\s*Boolean\(node\.metadata\?\.sourceImageTaskId\)/,
-  "direct regeneration failure must identify active tasks instead of checking for empty content",
+  /targetIds\.has\(node\.id\)\s*&&\s*node\.metadata\?\.status === NODE_STATUS_LOADING\s*&&\s*Boolean\(\s*node\.metadata\?\.sourceImageTaskId\s*&&\s*pendingTaskIds\.has\(node\.metadata\.sourceImageTaskId\),?\s*\)/,
+  "direct regeneration failure must identify active tasks from the current batch instead of checking for empty content",
 );
 assert.doesNotMatch(
   directRegenerationSource,

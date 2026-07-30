@@ -22,7 +22,7 @@ const activePhases = new Set(["checking", "downloading", "preparing", "installin
 
 export function UpdateSettingsPanel() {
     const [state, setState] = useState<DesktopUpdateState>(emptyUpdateState);
-    const [autoCheck, setAutoCheck] = useState(false);
+    const [autoCheck, setAutoCheck] = useState(true);
     const [loading, setLoading] = useState(true);
     const [actionError, setActionError] = useState("");
     const desktopAvailable = isDesktopUpdaterAvailable();
@@ -93,8 +93,8 @@ export function UpdateSettingsPanel() {
             </div>
 
             <div className="rounded-2xl border border-stone-200 p-4 dark:border-stone-800">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                    <div>
+                <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0 flex-1">
                         <div className="text-sm font-semibold">启动时自动检测更新</div>
                         <div className="mt-1 text-xs text-stone-500 dark:text-stone-400">开启后，每次启动客户端都会检查最新 Release；只检测，不会自动下载或安装。</div>
                     </div>
@@ -103,10 +103,11 @@ export function UpdateSettingsPanel() {
                         role="switch"
                         aria-checked={autoCheck}
                         disabled={!desktopAvailable || loading || downloading}
-                        className={`relative h-6 w-11 shrink-0 rounded-full transition ${autoCheck ? "bg-stone-900 dark:bg-white" : "bg-stone-300 dark:bg-stone-700"} disabled:cursor-not-allowed disabled:opacity-50`}
+                        aria-label="启动时自动检测更新"
+                        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors ${autoCheck ? "bg-stone-900 dark:bg-white" : "bg-stone-300 dark:bg-stone-700"} disabled:cursor-not-allowed disabled:opacity-50`}
                         onClick={() => void toggleAutoCheck()}
                     >
-                        <span className={`absolute top-0.5 size-5 rounded-full bg-white shadow-sm transition-transform dark:bg-stone-950 ${autoCheck ? "translate-x-5" : "translate-x-0.5"}`} />
+                        <span className={`block size-5 rounded-full bg-white shadow-sm transition-transform dark:bg-stone-950 ${autoCheck ? "translate-x-5" : "translate-x-0"}`} />
                     </button>
                 </div>
             </div>
@@ -129,7 +130,7 @@ export function UpdateSettingsPanel() {
                 </div>
 
                 <div className="grid gap-3 rounded-xl bg-stone-50 p-3 text-xs dark:bg-stone-900 sm:grid-cols-2">
-                    <InfoItem label="当前版本" value={`v${state.currentVersion || "1.1.0"}`} />
+                    <InfoItem label="当前版本" value={`v${state.currentVersion || "1.1.1"}`} />
                     <InfoItem label="最新版本" value={state.latestVersion ? `v${state.latestVersion}` : "尚未获取"} />
                     <InfoItem label="更新仓库" value="xshentx/Boundless-Studio" />
                     <InfoItem label="最后检查" value={formatDate(state.checkedAt)} />

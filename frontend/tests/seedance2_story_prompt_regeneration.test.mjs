@@ -158,7 +158,7 @@ assert.match(
 );
 assert.match(
   workspaceSource,
-  /resolveSeedance2ReferenceSlots\(\{[\s\S]*?placeholder,[\s\S]*?promptReferences = await hydrateSeedance2CustomerReferencesForTransport/,
+  /resolveSeedance2ReferenceSlots\(\s*\{[\s\S]*?placeholder,[\s\S]*?promptReferences\s*=\s*await hydrateSeedance2CustomerReferencesForTransport/,
   "node regeneration must include the video node's storyboard, character, scene, and manual references",
 );
 assert.match(

@@ -189,3 +189,41 @@ func TestAutoUpdateSettingPersistsInSQLite(t *testing.T) {
 		t.Fatal("automatic update setting was not restored from data/canvas.db")
 	}
 }
+
+func TestAutoUpdateDefaultsToEnabled(t *testing.T) {
+	server := newRelayServerWithStore(nil, context.Canceled)
+	if !server.config.AutoCheckUpdates {
+		t.Fatal("automatic update checks should default to enabled")
+	}
+}
+
+func TestAutoUpdateDisabledSettingPersistsInSQLite(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "data")
+	server := newRelayServerAt(dataDir)
+	if server.storageErr != nil {
+		t.Fatal(server.storageErr)
+	}
+	server.config.AutoCheckUpdates = false
+	if err := server.saveConfig(); err != nil {
+		t.Fatal(err)
+	}
+	if err := server.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened := newRelayServerAt(dataDir)
+	defer reopened.Close()
+	if reopened.config.AutoCheckUpdates {
+		t.Fatal("an explicitly disabled automatic update setting was not restored from data/canvas.db")
+	}
+}
+
+func TestLegacyClientConfigKeepsAutoUpdateDefaultEnabled(t *testing.T) {
+	server := newRelayServerWithStore(nil, context.Canceled)
+	if err := server.applyConfigJSON([]byte(`{"upstreamUrl":"https://relay.example.com/"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if !server.config.AutoCheckUpdates {
+		t.Fatal("a legacy config without autoCheckUpdates should keep the enabled default")
+	}
+}

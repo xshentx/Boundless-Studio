@@ -27,9 +27,12 @@ const pollSource = source.slice(
   source.indexOf("async function fetchCustomerVideoTask"),
   source.indexOf("function isCustomerVideoTaskReady"),
 );
+const seedanceGenerateStart = source.indexOf(
+  "const generateSeedance2VideoFromPlaceholder = useCallback",
+);
 const seedanceSubmitSource = source.slice(
-  source.indexOf("const videoApiConfig = buildCustomerVideoApiConfig"),
-  source.indexOf("const created = await requestCustomerVideoTask"),
+  source.indexOf("const videoApiConfig = buildCustomerVideoApiConfig", seedanceGenerateStart),
+  source.indexOf("const created = await requestCustomerVideoTask", seedanceGenerateStart),
 );
 const seedanceReferencePrepareSource = source.slice(
   source.indexOf("const resolvedSlots = resolveSeedance2ReferenceSlots"),
@@ -105,7 +108,7 @@ assert.match(
 
 assert.match(
   seedanceSubmitSource,
-  /const videoApiConfig = buildCustomerVideoApiConfig\(latest, config, effectiveConfig\);[\s\S]*const payload = buildSeedance2CustomerVideoPayload\(latest, references, videoApiConfig\.model\);/,
+  /const videoApiConfig = buildCustomerVideoApiConfig\(\s*latest,\s*config,\s*effectiveConfig,?\s*\);[\s\S]*const payload = buildSeedance2CustomerVideoPayload\(\s*latest,\s*references,\s*videoApiConfig\.model,?\s*\);/,
   "Seedance2 workflow should build payload with the model selected by the global videoGeneration route",
 );
 

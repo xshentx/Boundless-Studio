@@ -24,7 +24,7 @@ export type DesktopUpdateState = {
 
 export const emptyUpdateState: DesktopUpdateState = {
     phase: "idle",
-    currentVersion: "1.1.0",
+    currentVersion: "1.1.1",
     latestVersion: "",
     available: false,
     releaseName: "",
@@ -49,7 +49,7 @@ export function isDesktopUpdaterAvailable() {
 
 export async function loadDesktopUpdateSettings() {
     if (!isDesktopUpdaterAvailable()) {
-        return { autoCheckUpdates: false, state: emptyUpdateState };
+        return { autoCheckUpdates: true, state: emptyUpdateState };
     }
     const [config, state] = await Promise.all([GetClientConfig(), GetUpdateState()]);
     return { autoCheckUpdates: Boolean(config.autoCheckUpdates), state: normalizeUpdateState(state) };

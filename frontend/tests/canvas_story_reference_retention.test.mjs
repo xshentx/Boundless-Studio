@@ -115,7 +115,7 @@ const createImageFileNodeSource = canvasClientSource.slice(
 );
 assert.match(
   createImageFileNodeSource,
-  /uploadImage\(file,\s*CANVAS_RETAINED_IMAGE_UPLOAD_OPTIONS\)/,
+  /uploadImage\(\s*file,\s*CANVAS_RETAINED_IMAGE_UPLOAD_OPTIONS,?\s*\)/,
   "manual canvas image uploads should be stored as retained local images",
 );
 assert.match(

@@ -68,7 +68,7 @@ func newRelayServerWithStore(store *DesktopStore, storageErr error) *RelayServer
 		upstream = "http://127.0.0.1:3001"
 	}
 	server := &RelayServer{
-		config:     ClientConfig{UpstreamURL: strings.TrimRight(upstream, "/")},
+		config:     ClientConfig{UpstreamURL: strings.TrimRight(upstream, "/"), AutoCheckUpdates: true},
 		client:     &http.Client{Timeout: 10 * time.Minute},
 		store:      store,
 		storageErr: storageErr,
@@ -490,7 +490,7 @@ func (s *RelayServer) FetchModels(ctx context.Context, baseURL, apiKey string) R
 // OpenAI-compatible video jobs through Go's native HTTP client. Packaged macOS
 // pages use the wails: scheme, and WKWebView can block their browser request to
 // the HTTP loopback proxy before that request reaches the desktop application.
-func (s *RelayServer) RequestRelayVideo(ctx context.Context, method, baseURL, apiKey, relayPath, requestBody string) RelayVideoResponse {
+func (s *RelayServer) RequestRelayVideo(ctx context.Context, method, baseURL, apiKey, relayPath, requestBody, idempotencyKey string) RelayVideoResponse {
 	method = strings.ToUpper(strings.TrimSpace(method))
 	relayPath = strings.Trim(strings.TrimSpace(relayPath), "/")
 	if !isAllowedRelayVideoRequest(method, relayPath) {
@@ -512,6 +512,9 @@ func (s *RelayServer) RequestRelayVideo(ctx context.Context, method, baseURL, ap
 	}
 	if key := strings.TrimSpace(apiKey); key != "" {
 		request.Header.Set("Authorization", "Bearer "+key)
+	}
+	if key := strings.TrimSpace(idempotencyKey); key != "" {
+		request.Header.Set("Idempotency-Key", key)
 	}
 	request.Header.Set("Accept", "application/json")
 	if method == http.MethodPost {
@@ -733,7 +736,10 @@ func (s *RelayServer) loadConfig() error {
 }
 
 func (s *RelayServer) applyConfigJSON(data []byte) error {
-	var config ClientConfig
+	var config struct {
+		UpstreamURL      string `json:"upstreamUrl"`
+		AutoCheckUpdates *bool  `json:"autoCheckUpdates"`
+	}
 	if err := json.Unmarshal(data, &config); err != nil {
 		return err
 	}
@@ -742,7 +748,9 @@ func (s *RelayServer) applyConfigJSON(data []byte) error {
 		return err
 	}
 	s.config.UpstreamURL = normalized
-	s.config.AutoCheckUpdates = config.AutoCheckUpdates
+	if config.AutoCheckUpdates != nil {
+		s.config.AutoCheckUpdates = *config.AutoCheckUpdates
+	}
 	return nil
 }
 

@@ -58,7 +58,7 @@ assert.match(saveCallbackSource, /node\.metadata\?\.seedance2FaceEditOriginal\?\
 assert.match(saveCallbackSource, /node\.metadata\?\.storageKey/);
 assert.doesNotMatch(saveCallbackSource, /setConnections/);
 assert.doesNotMatch(saveCallbackSource, /seedance2-face-edit-child/);
-assert.match(saveCallbackSource, /catch \(error\) \{[\s\S]*?message\.error\([\s\S]*?throw \(error instanceof Error \? error : new Error\(/);
+assert.match(saveCallbackSource, /catch\s*\(error\)\s*\{[\s\S]*?message\.error\([\s\S]*?throw\s*\(?\s*error instanceof Error\s*\?\s*error\s*:\s*new Error\(/);
 
 const restoreCallbackMatch = source.match(
   /const restoreSeedance2FaceEditOriginalImageNode = useCallback\([\s\S]*?\n  \);/,

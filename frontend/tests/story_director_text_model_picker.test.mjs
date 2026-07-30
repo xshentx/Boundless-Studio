@@ -71,7 +71,7 @@ assert.match(
 
 assert.match(
   workspaceSource,
-  /storyDirectorInheritedTextModel=\{effectiveConfig\.textModel\s*\|\|\s*effectiveConfig\.model\s*\|\|\s*defaultConfig\.textModel\}/,
+  /storyDirectorInheritedTextModel=\{\s*effectiveConfig\.textModel\s*\|\|\s*effectiveConfig\.model\s*\|\|\s*defaultConfig\.textModel\s*\}/,
   "workspace should pass the inherited global text model into the story director panel",
 );
 assert.match(

@@ -69,12 +69,12 @@ assert.match(
 assert.match(handlerSource, /useCallback\(\s*async\s*\(workflowNode/);
 assert.match(
   panelSource,
-  /resolveSeedance2PromptTextModel\(node,\s*effectiveConfig\)/,
+  /resolveSeedance2PromptTextModel\(\s*node,\s*effectiveConfig,?\s*\)/,
   "the picker should display the shared resolved Seedance2 text model",
 );
 assert.match(
   handlerSource,
-  /resolveSeedance2PromptTextModel\(workflowNode,\s*effectiveConfig\)/,
+  /resolveSeedance2PromptTextModel\(\s*workflowNode,\s*effectiveConfig,?\s*\)/,
   "the rewrite request should use the same model resolution as the picker",
 );
 assert.match(

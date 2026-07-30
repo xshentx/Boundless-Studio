@@ -21,7 +21,7 @@ assert.match(
 );
 assert.match(
   recoveryBranch,
-  /then\(async\s*\(recoveredProject\)\s*=>/,
+  /then\(\s*async\s*\(recoveredProject\)\s*=>/,
   "recovery load should use an async callback so it can restore immediately after storage replacement",
 );
 assert.match(

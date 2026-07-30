@@ -66,7 +66,7 @@ assert.match(
 );
 assert.match(
   panelSource,
-  /resolveSeedance2PromptTextModel\(node,\s*effectiveConfig\)/,
+  /resolveSeedance2PromptTextModel\(\s*node,\s*effectiveConfig,?\s*\)/,
   "Seedance2 text model picker should use the shared resolver also used by batch rewrite requests",
 );
 assert.match(

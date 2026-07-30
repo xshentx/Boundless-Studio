@@ -453,7 +453,6 @@ function Seedance2FaceEditDialogInner({
   const [zoom, setZoom] = useState(() => DEFAULT_ZOOM);
   const [fitZoom, setFitZoom] = useState(() => DEFAULT_ZOOM);
   const [error, setError] = useState(() => "");
-  const [previewDataUrl, setPreviewDataUrl] = useState(() => "");
   const [isSaving, setIsSaving] = useState(false);
   const [hasUndoSnapshot, setHasUndoSnapshot] = useState(false);
 
@@ -505,7 +504,6 @@ function Seedance2FaceEditDialogInner({
         setLayers([]);
         setSelectedLayerId("");
         setActiveTool("select");
-        setPreviewDataUrl("");
         setError("读取图片尺寸失败，请重新选择图片");
       });
 
@@ -540,34 +538,6 @@ function Seedance2FaceEditDialogInner({
     observer.observe(viewport);
     return () => observer.disconnect();
   }, [imageMeta]);
-
-  useEffect(() => {
-    if (!imageMeta) {
-      return;
-    }
-
-    let active = true;
-    const faceLayers = layers.filter((layer): layer is FaceEditorFaceLayer => layer.kind === "face");
-    const gridLayers = layers.filter((layer): layer is FaceEditorGridLayer => layer.kind === "grid");
-    void composeSeedance2FaceEditImage({
-      sourceDataUrl: dataUrl,
-      imageSize: imageMeta,
-      faceLayers,
-      gridLayers,
-    })
-      .then((nextPreviewDataUrl) => {
-        if (!active) return;
-        setPreviewDataUrl(nextPreviewDataUrl);
-      })
-      .catch(() => {
-        if (!active) return;
-        setPreviewDataUrl("");
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [dataUrl, imageMeta, layers]);
 
   const imageSize = imageMeta ? { width: imageMeta.width, height: imageMeta.height } : null;
   const handToolActive = activeTool === "hand" || isCtrlPanning;
@@ -1121,7 +1091,7 @@ function Seedance2FaceEditDialogInner({
                     className={`relative touch-none overflow-hidden bg-black shadow-[0_0_0_1px_rgba(255,255,255,.08)] ${handToolActive ? "cursor-grab active:cursor-grabbing" : ""}`}
                     style={{ width: workspaceSize.width, height: workspaceSize.height }}
                   >
-                    <img src={previewDataUrl || dataUrl} alt="" draggable={false} className="pointer-events-none absolute inset-0 h-full w-full select-none object-fill" />
+                    <img src={dataUrl} alt="" draggable={false} className="pointer-events-none absolute inset-0 h-full w-full select-none object-fill" />
                     {layers
                       .filter((layer): layer is FaceEditorFaceLayer => layer.kind === "face")
                       .map((layer) => (

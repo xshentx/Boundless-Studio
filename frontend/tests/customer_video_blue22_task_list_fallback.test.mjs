@@ -21,7 +21,7 @@ const fetchTaskSource = source.slice(
 
 assert.match(
   pollUrlSource,
-  /function customerVideoTaskListUrl\(taskId: string, apiConfig: CustomerVideoApiConfig\)/,
+  /function customerVideoTaskListUrl\(\s*taskId: string,\s*apiConfig: CustomerVideoApiConfig,?\s*\)/,
   "blue22 轮询需要任务列表 URL 辅助函数，走 /v1/tasks 后按 task_id 查找",
 );
 assert.match(

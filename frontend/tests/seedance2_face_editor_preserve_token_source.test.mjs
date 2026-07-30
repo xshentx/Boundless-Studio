@@ -32,7 +32,7 @@ assert.ok(
 );
 assert.match(
   helperSource,
-  /return normalizedContent \|\| normalizedBackendUrl \|\| \(backendRel \? `\/images\/\$\{backendRel\}` : ""\);/,
+  /return\s*\(?\s*normalizedContent\s*\|\|\s*normalizedBackendUrl\s*\|\|\s*\(backendRel\s*\?\s*`\/images\/\$\{backendRel\}`\s*:\s*""\)\s*\)?;/,
   "Seedance2 face edit fallback should preserve tokenized same-origin URLs before using bare backendRel",
 );
 

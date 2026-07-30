@@ -184,6 +184,7 @@ export type Seedance2ReferenceSlotBinding = {
 export type SeedanceGenerationTaskState = {
     status: "idle" | "generating" | "success" | "failed" | "timeout";
     taskId?: string;
+    submissionId?: string;
     startedAt?: string;
     timedOutAt?: string;
     errorMessage?: string;
@@ -245,6 +246,14 @@ export type CanvasNodeMetadata = {
     durationMs?: number;
     source?: string;
     sourceImageTaskId?: string;
+    videoGenerationSubmissionId?: string;
+    videoGenerationTask?: {
+        id: string;
+        provider: "openai" | "seedance";
+        model: string;
+        boardRouteKey?: "videoGeneration";
+        routeProviderId?: string;
+    };
     imageTaskId?: string;
     storyText?: string;
     storyDirectorTextModel?: string;

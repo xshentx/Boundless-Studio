@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -67,9 +67,9 @@ assert.match(source, /createGridLinePlan/);
 assert.match(source, /faceLayers:\s*FaceEditorFaceLayer\[\]/);
 assert.match(source, /const faceLayers = layers\.filter\(\(layer\): layer is FaceEditorFaceLayer => layer\.kind === "face"\);/);
 assert.match(source, /const gridLayers = layers\.filter\(\(layer\): layer is FaceEditorGridLayer => layer\.kind === "grid"\);/);
-assert.match(source, /const \[previewDataUrl, setPreviewDataUrl\] = useState(?:<string>)?\((?:\(\) => )?""\);/);
-assert.match(source, /useEffect\(\(\) => \{[\s\S]*?composeSeedance2FaceEditImage\(\{[\s\S]*?sourceDataUrl: dataUrl,[\s\S]*?imageSize: imageMeta,[\s\S]*?faceLayers,[\s\S]*?gridLayers,[\s\S]*?setPreviewDataUrl[\s\S]*?\}, \[dataUrl, imageMeta, layers\]\);/);
-assert.match(source, /src=\{previewDataUrl \|\| dataUrl\}/);
+assert.doesNotMatch(source, /previewDataUrl|setPreviewDataUrl/, "the live DOM preview must not reuse an already-composited bitmap");
+assert.match(source, /<img src=\{dataUrl\} alt="" draggable=\{false\}/, "the editor base layer should remain the untouched source image");
+assert.doesNotMatch(source, /src=\{previewDataUrl \|\| dataUrl\}/);
 assert.match(source, /faceLayers\.forEach\(\(layer\) => drawWhiteFill\(context, layer\.sourceSelection\)\);/);
 assert.match(source, /faceLayers\.forEach\(\(layer\) => drawFaceLayer\(context, source, layer\)\);/);
 assert.match(source, /const \[isSaving, setIsSaving\] = useState\(false\);/);

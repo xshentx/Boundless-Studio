@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createRequire } from "node:module";
@@ -47,5 +47,14 @@ const serverMessage = formatCustomerVideoRequestError(new Error("Video task subm
 assert.match(serverMessage, /视频任务提交失败/, "known English submit errors should be localized");
 assert.match(serverMessage, /401/, "status code should be preserved");
 assert.doesNotMatch(serverMessage, /Video task submit failed/, "known English submit errors should not leak to the UI");
+
+const upstreamMessage = formatCustomerVideoRequestError(new Error("上游模型不可用"), {
+  action: "poll",
+});
+assert.equal(
+  upstreamMessage,
+  "视频任务查询失败：上游模型不可用",
+  "specific upstream errors should be preserved and labeled with the failed video action",
+);
 
 console.log("customer video Chinese error tests passed");

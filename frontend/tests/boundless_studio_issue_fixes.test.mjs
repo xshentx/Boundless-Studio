@@ -47,7 +47,7 @@ const keydownStart = workspace.indexOf("const handleKeyDown = (event: KeyboardEv
 const keyboardHandler = workspace.slice(keydownStart, workspace.indexOf("window.addEventListener(\"keydown\"", keydownStart));
 assert.ok(keyboardHandler.indexOf('event.key === "Delete"') < keyboardHandler.indexOf('target?.closest("[data-canvas-no-zoom]")'), "delete handling must run before video controls opt out of canvas shortcuts");
 assert.match(keyboardHandler, /isEditableTarget[\s\S]*contenteditable/, "editable fields must retain normal Backspace behavior");
-assert.match(workspace, /CanvasNodeType\.Video && node\.metadata\?\.content\) return false;/, "completed video connections must target the visible node handle");
+assert.match(workspace, /CanvasNodeType\.Video\s*&&\s*node\.metadata\?\.content\s*\)\s*return false;/, "completed video connections must target the visible node handle");
 
 const qualityOptions = settings.slice(settings.indexOf("const qualityOptions"), settings.indexOf("const DIMENSION_STEP"));
 for (const tier of ["1k", "2k", "4k"]) assert.match(qualityOptions, new RegExp(`\\{ value: "${tier}", label: "${tier}" \\}`));

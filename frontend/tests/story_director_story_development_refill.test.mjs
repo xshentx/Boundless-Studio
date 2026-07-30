@@ -113,7 +113,7 @@ for (const duplicatedLabel of ["画面内容：", "出场角色：", "情绪氛�
 
 assert.match(
   workspaceSource,
-  /const storyDevelopmentText = buildStoryDevelopmentText\(analysis, node, storyText\);/,
+  /const storyDevelopmentText = buildStoryDevelopmentText\(\s*analysis,\s*node,\s*storyText,?\s*\);/,
   "analysis success should build story-development text before metadata patching",
 );
 assert.match(

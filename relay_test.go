@@ -62,12 +62,14 @@ func TestRequestRelayVideoUsesNativeHTTPClient(t *testing.T) {
 	var gotPath string
 	var gotAuthorization string
 	var gotContentType string
+	var gotIdempotencyKey string
 	var gotBody []byte
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod = r.Method
 		gotPath = r.URL.Path
 		gotAuthorization = r.Header.Get("Authorization")
 		gotContentType = r.Header.Get("Content-Type")
+		gotIdempotencyKey = r.Header.Get("Idempotency-Key")
 		gotBody, _ = io.ReadAll(r.Body)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusAccepted)
@@ -76,7 +78,7 @@ func TestRequestRelayVideoUsesNativeHTTPClient(t *testing.T) {
 	defer upstream.Close()
 
 	server := newTestRelayServer(t)
-	result := server.RequestRelayVideo(t.Context(), http.MethodPost, upstream.URL+"/v1", "video-key", "videos/generations", `{"model":"seedance-2.0"}`)
+	result := server.RequestRelayVideo(t.Context(), http.MethodPost, upstream.URL+"/v1", "video-key", "videos/generations", `{"model":"seedance-2.0"}`, "canvas-submission-1")
 	if result.Message != "" || result.Status != http.StatusAccepted || result.Body != `{"task_id":"video-task-1"}` {
 		t.Fatalf("unexpected result: %+v", result)
 	}
@@ -85,6 +87,9 @@ func TestRequestRelayVideoUsesNativeHTTPClient(t *testing.T) {
 	}
 	if gotAuthorization != "Bearer video-key" || gotContentType != "application/json" {
 		t.Fatalf("authorization=%q content-type=%q", gotAuthorization, gotContentType)
+	}
+	if gotIdempotencyKey != "canvas-submission-1" {
+		t.Fatalf("idempotency-key=%q", gotIdempotencyKey)
 	}
 	if got, want := string(gotBody), `{"model":"seedance-2.0"}`; got != want {
 		t.Fatalf("body=%q want=%q", got, want)
@@ -103,7 +108,7 @@ func TestRequestRelayVideoUsesLegacyTaskEndpoint(t *testing.T) {
 	defer upstream.Close()
 
 	server := newTestRelayServer(t)
-	result := server.RequestRelayVideo(t.Context(), http.MethodGet, upstream.URL, "video-key", "api/tasks/legacy-task-1", "")
+	result := server.RequestRelayVideo(t.Context(), http.MethodGet, upstream.URL, "video-key", "api/tasks/legacy-task-1", "", "")
 	if result.Message != "" || result.Status != http.StatusOK {
 		t.Fatalf("unexpected result: %+v", result)
 	}
@@ -124,7 +129,7 @@ func TestRequestRelayVideoPreservesOpaqueTaskID(t *testing.T) {
 	defer upstream.Close()
 
 	server := newTestRelayServer(t)
-	result := server.RequestRelayVideo(t.Context(), http.MethodGet, upstream.URL, "video-key", "api/tasks/folder%2Ftask%3Fpart", "")
+	result := server.RequestRelayVideo(t.Context(), http.MethodGet, upstream.URL, "video-key", "api/tasks/folder%2Ftask%3Fpart", "", "")
 	if result.Message != "" || result.Status != http.StatusOK {
 		t.Fatalf("unexpected result: %+v", result)
 	}
@@ -144,7 +149,7 @@ func TestRequestRelayVideoRejectsOversizedResponse(t *testing.T) {
 	defer upstream.Close()
 
 	server := newTestRelayServer(t)
-	result := server.RequestRelayVideo(t.Context(), http.MethodGet, upstream.URL, "video-key", "tasks", "")
+	result := server.RequestRelayVideo(t.Context(), http.MethodGet, upstream.URL, "video-key", "tasks", "", "")
 	if result.Status != http.StatusOK || result.Message == "" || result.Body != "" {
 		t.Fatalf("unexpected result: %+v", result)
 	}
@@ -152,7 +157,7 @@ func TestRequestRelayVideoRejectsOversizedResponse(t *testing.T) {
 
 func TestRequestRelayVideoRejectsUnexpectedEndpoint(t *testing.T) {
 	server := newTestRelayServer(t)
-	result := server.RequestRelayVideo(t.Context(), http.MethodPost, "https://api.example.com", "key", "chat/completions", `{}`)
+	result := server.RequestRelayVideo(t.Context(), http.MethodPost, "https://api.example.com", "key", "chat/completions", `{}`, "")
 	if result.Status != 0 || result.Message == "" {
 		t.Fatalf("unexpected result: %+v", result)
 	}

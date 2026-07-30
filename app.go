@@ -126,12 +126,12 @@ func (a *App) FetchRelayModels(baseURL, apiKey string) RelayModelsResponse {
 	return a.relay.FetchModels(ctx, baseURL, apiKey)
 }
 
-func (a *App) RequestRelayVideo(method, baseURL, apiKey, relayPath, requestBody string) RelayVideoResponse {
+func (a *App) RequestRelayVideo(method, baseURL, apiKey, relayPath, requestBody, idempotencyKey string) RelayVideoResponse {
 	ctx := a.runtimeContext()
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return a.relay.RequestRelayVideo(ctx, method, baseURL, apiKey, relayPath, requestBody)
+	return a.relay.RequestRelayVideo(ctx, method, baseURL, apiKey, relayPath, requestBody, idempotencyKey)
 }
 
 func (a *App) SetUpstreamURL(value string) error {
